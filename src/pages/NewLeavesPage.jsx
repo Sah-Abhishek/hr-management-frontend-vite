@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, ChevronLeft, ChevronRight, X, Clock, Sun, Sunset, Trash2 } from 'lucide-react';
+import { Plus, Calendar, ChevronLeft, ChevronRight, X, Clock, Sun, Sunset, Trash2, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { format } from 'date-fns';
@@ -18,6 +19,7 @@ const LeavesPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [holidays, setHolidays] = useState([]);
 
   // Selected dates with their configurations
   // Format: { 'YYYY-MM-DD': { type: 'full' | 'half', period: 'morning' | 'afternoon' } }
@@ -31,6 +33,7 @@ const LeavesPage = () => {
   useEffect(() => {
     fetchLeaves();
     loadLeaveTypes();
+    fetchHolidays();
   }, []);
 
   const loadLeaveTypes = () => {
@@ -59,6 +62,44 @@ const LeavesPage = () => {
     }
   };
 
+  const fetchHolidays = async () => {
+    try {
+      const response = await api.get('/holidays');
+      setHolidays(response.data);
+    } catch (error) {
+      console.error('Failed to fetch holidays:', error);
+      // Don't show error toast - holidays are optional feature
+    }
+  };
+
+  const formatDateKey = (year, month, day) => {
+    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  };
+
+
+  // Create a map of holiday dates for quick lookup
+  const getHolidayMap = () => {
+    const holidayMap = {};
+    holidays.forEach(holiday => {
+      const date = new Date(holiday.date);
+      const dateKey = formatDateKey(date.getFullYear(), date.getMonth(), date.getDate());
+      holidayMap[dateKey] = holiday;
+    });
+    return holidayMap;
+  };
+
+  const holidayMap = getHolidayMap();
+
+  // Check if a date is a holiday
+  const isHoliday = (dateKey) => {
+    return !!holidayMap[dateKey];
+  };
+
+  // Get holiday info for a date
+  const getHolidayInfo = (dateKey) => {
+    return holidayMap[dateKey] || null;
+  };
+
   // Calendar helper functions
   const getDaysInMonth = (date) => {
     const year = date.getFullYear();
@@ -78,9 +119,6 @@ const LeavesPage = () => {
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
   };
 
-  const formatDateKey = (year, month, day) => {
-    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  };
 
   const toggleDateSelection = (dateKey) => {
     const today = new Date();
@@ -89,6 +127,13 @@ const LeavesPage = () => {
 
     if (selectedDate < today) {
       toast.error('Cannot select past dates');
+      return;
+    }
+
+    // Check if date is a holiday
+    if (isHoliday(dateKey)) {
+      const holiday = getHolidayInfo(dateKey);
+      toast.error(`${holiday.name} - This is a holiday, no need to apply for leave`);
       return;
     }
 
@@ -262,18 +307,22 @@ const LeavesPage = () => {
       const isPast = date < today;
       const isWeekend = date.getDay() === 0 || date.getDay() === 6;
       const config = selectedDates[dateKey];
+      const holidayInfo = getHolidayInfo(dateKey);
+      const isHolidayDate = !!holidayInfo;
 
-      days.push(
+      const dayButton = (
         <button
           key={day}
           type="button"
-          onClick={() => !isPast && toggleDateSelection(dateKey)}
-          disabled={isPast}
+          onClick={() => !isPast && !isHolidayDate && toggleDateSelection(dateKey)}
+          disabled={isPast || isHolidayDate}
           className={`
             h-10 w-10 rounded-full text-sm font-medium transition-all relative
-            ${isPast ? 'text-slate-300 cursor-not-allowed' : 'cursor-pointer hover:bg-slate-100'}
-            ${isToday ? 'ring-2 ring-blue-400 ring-offset-1' : ''}
-            ${isWeekend && !isSelected ? 'text-slate-400' : ''}
+            ${isPast ? 'text-slate-300 cursor-not-allowed' : ''}
+            ${isHolidayDate && !isPast ? 'bg-rose-100 text-rose-600 cursor-not-allowed border-2 border-rose-300' : ''}
+            ${!isPast && !isHolidayDate ? 'cursor-pointer hover:bg-slate-100' : ''}
+            ${isToday && !isSelected && !isHolidayDate ? 'ring-2 ring-blue-400 ring-offset-1' : ''}
+            ${isWeekend && !isSelected && !isHolidayDate ? 'text-slate-400' : ''}
             ${isSelected && config?.type === 'full' ? 'bg-emerald-500 text-white hover:bg-emerald-600' : ''}
             ${isSelected && config?.type === 'half' ? 'bg-amber-400 text-white hover:bg-amber-500' : ''}
           `}
@@ -284,8 +333,32 @@ const LeavesPage = () => {
               ½
             </span>
           )}
+          {isHolidayDate && (
+            <Star className="absolute -top-1 -right-1 w-3 h-3 text-rose-500 fill-rose-500" />
+          )}
         </button>
       );
+
+      // Wrap holiday dates with tooltip
+      if (isHolidayDate) {
+        days.push(
+          <TooltipProvider key={day}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {dayButton}
+              </TooltipTrigger>
+              <TooltipContent side="top" className="bg-rose-600 text-white">
+                <p className="font-medium">{holidayInfo.name}</p>
+                {holidayInfo.type && (
+                  <p className="text-xs opacity-80 capitalize">{holidayInfo.type} Holiday</p>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      } else {
+        days.push(dayButton);
+      }
     }
 
     return (
@@ -332,6 +405,13 @@ const LeavesPage = () => {
   ];
 
   const sortedSelectedDates = Object.keys(selectedDates).sort();
+
+  // Get holidays for current month for display
+  const currentMonthHolidays = holidays.filter(holiday => {
+    const holidayDate = new Date(holiday.date);
+    return holidayDate.getMonth() === currentMonth.getMonth() &&
+      holidayDate.getFullYear() === currentMonth.getFullYear();
+  }).sort((a, b) => new Date(a.date) - new Date(b.date));
 
   if (loading) {
     return (
@@ -432,7 +512,31 @@ const LeavesPage = () => {
                         <div className="w-4 h-4 rounded-full bg-amber-400"></div>
                         <span className="text-slate-600">Half Day</span>
                       </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-rose-100 border-2 border-rose-300 relative">
+                          <Star className="absolute -top-1 -right-1 w-2 h-2 text-rose-500 fill-rose-500" />
+                        </div>
+                        <span className="text-slate-600">Holiday</span>
+                      </div>
                     </div>
+
+                    {/* Current Month Holidays */}
+                    {currentMonthHolidays.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-slate-200">
+                        <p className="text-xs font-medium text-slate-500 mb-2">Holidays this month:</p>
+                        <div className="space-y-1">
+                          {currentMonthHolidays.map((holiday, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-xs">
+                              <Star className="w-3 h-3 text-rose-500 fill-rose-500" />
+                              <span className="text-rose-600 font-medium">
+                                {format(new Date(holiday.date), 'MMM dd')}
+                              </span>
+                              <span className="text-slate-600">- {holiday.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
