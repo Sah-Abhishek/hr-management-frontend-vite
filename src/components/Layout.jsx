@@ -4,6 +4,8 @@ import { Home, Users, FileText, CheckSquare, User, LogOut, Menu, X, Settings, Be
 import { clearAuth, getAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
+import { ClipboardCheck } from 'lucide-react';
+
 
 const Layout = () => {
   const navigate = useNavigate();
@@ -11,8 +13,6 @@ const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const { user } = getAuth();
-  // console.log("This is the user: ", user)
-  // console.log("This is the currentUser: ", currentUser.role)
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -31,10 +31,38 @@ const Layout = () => {
     navigate('/login');
   };
 
+  // Helper function to get initials from name
+  const getInitials = (name) => {
+    if (!name) return '?';
+    const parts = name.trim().split(' ');
+    if (parts.length === 1) return parts[0][0]?.toUpperCase() || '?';
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  // Helper function to generate a consistent color based on name
+  const getAvatarColor = (name) => {
+    const colors = [
+      'bg-blue-500',
+      'bg-emerald-500',
+      'bg-purple-500',
+      'bg-amber-500',
+      'bg-rose-500',
+      'bg-cyan-500',
+      'bg-indigo-500',
+      'bg-pink-500',
+      'bg-teal-500',
+      'bg-orange-500',
+    ];
+    if (!name) return colors[0];
+    const index = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
+    return colors[index];
+  };
+
   const navigation = [
     { name: 'Dashboard', href: '/', icon: Home, roles: ['admin', 'manager', 'employee'] },
     { name: 'Employees', href: '/employees', icon: Users, roles: ['admin', 'manager'] },
     { name: 'Hierarchy', href: '/hierarchy', icon: Network, roles: ['admin', 'manager'] },
+    { name: 'Attendance', href: '/attendance', icon: ClipboardCheck, roles: ['admin',] },
     { name: 'My Leaves', href: '/leaves', icon: FileText, roles: ['admin', 'manager', 'employee'] },
     { name: 'All Leaves', href: '/all-leaves', icon: ClipboardList, roles: ['admin'] },
     { name: 'Holidays', href: '/holidays', icon: ClipboardList, roles: ['admin', 'admin', 'manager'] },
@@ -56,13 +84,42 @@ const Layout = () => {
     item.roles.includes(user?.role)
   );
 
-  // console.log("This is the filtered navigation: ", filteredNavigation)
-
   const isActive = (href) => {
     if (href === '/') {
       return location.pathname === '/';
     }
     return location.pathname.startsWith(href);
+  };
+
+  const displayName = currentUser?.full_name || user?.full_name;
+  const profilePictureUrl = currentUser?.profile_picture_url;
+
+  // Avatar component to avoid repetition
+  const UserAvatar = ({ size = 'md' }) => {
+    const sizeClasses = size === 'md' ? 'w-10 h-10' : 'w-8 h-8';
+    const textSize = size === 'md' ? 'text-sm' : 'text-xs';
+
+    return (
+      <div className={`flex-shrink-0 ${sizeClasses} rounded-full overflow-hidden ring-2 ring-slate-100`}>
+        {profilePictureUrl ? (
+          <img
+            src={profilePictureUrl}
+            alt={displayName}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'flex';
+            }}
+          />
+        ) : null}
+        <div
+          className={`w-full h-full ${getAvatarColor(displayName)} flex items-center justify-center text-white font-semibold ${textSize}`}
+          style={{ display: profilePictureUrl ? 'none' : 'flex' }}
+        >
+          {getInitials(displayName)}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -75,7 +132,7 @@ const Layout = () => {
           </h1>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-1">
+        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
           {filteredNavigation.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
@@ -100,17 +157,18 @@ const Layout = () => {
         </nav>
 
         <div className="p-4 border-t border-slate-200">
-          <div className="flex items-center mb-3">
-            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center">
-              <User className="w-5 h-5 text-slate-600" />
-            </div>
+          <Link
+            to="/profile"
+            className="flex items-center mb-3 p-2 -mx-2 rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            <UserAvatar size="md" />
             <div className="ml-3 flex-1 min-w-0">
               <p className="text-sm font-medium text-slate-900 truncate">
-                {currentUser?.full_name || user?.full_name}
+                {displayName}
               </p>
               <p className="text-xs text-slate-500 truncate capitalize">{user?.role}</p>
             </div>
-          </div>
+          </Link>
           <Button
             onClick={handleLogout}
             data-testid="logout-btn"
@@ -143,7 +201,24 @@ const Layout = () => {
               </button>
             </div>
 
-            <nav className="px-4 py-6 space-y-1">
+            {/* Mobile User Info at Top */}
+            <div className="px-4 py-4 border-b border-slate-100">
+              <Link
+                to="/profile"
+                onClick={() => setSidebarOpen(false)}
+                className="flex items-center p-2 -mx-2 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                <UserAvatar size="md" />
+                <div className="ml-3 flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900 truncate">
+                    {displayName}
+                  </p>
+                  <p className="text-xs text-slate-500 truncate capitalize">{user?.role}</p>
+                </div>
+              </Link>
+            </div>
+
+            <nav className="px-4 py-4 space-y-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
               {filteredNavigation.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item.href);
@@ -167,7 +242,7 @@ const Layout = () => {
               })}
             </nav>
 
-            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200">
+            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200 bg-white">
               <Button
                 onClick={handleLogout}
                 variant="ghost"
@@ -195,7 +270,28 @@ const Layout = () => {
           <h1 className="text-xl font-bold text-slate-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
             HRMS
           </h1>
-          <div className="w-6" />
+          {/* Mobile header avatar */}
+          <Link to="/profile" className="flex-shrink-0">
+            <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-slate-100">
+              {profilePictureUrl ? (
+                <img
+                  src={profilePictureUrl}
+                  alt={displayName}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div
+                className={`w-full h-full ${getAvatarColor(displayName)} flex items-center justify-center text-white font-semibold text-xs`}
+                style={{ display: profilePictureUrl ? 'none' : 'flex' }}
+              >
+                {getInitials(displayName)}
+              </div>
+            </div>
+          </Link>
         </div>
 
         {/* Page Content */}

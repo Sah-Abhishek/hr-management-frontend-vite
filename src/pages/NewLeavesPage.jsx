@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, ChevronLeft, ChevronRight, X, Clock, Sun, Sunset, Trash2, Star } from 'lucide-react';
+import { Plus, Calendar, ChevronLeft, ChevronRight, X, Clock, Sun, Sunset, Trash2, Star, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -76,7 +76,6 @@ const LeavesPage = () => {
     return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   };
 
-
   // Create a map of holiday dates for quick lookup
   const getHolidayMap = () => {
     const holidayMap = {};
@@ -90,6 +89,31 @@ const LeavesPage = () => {
 
   const holidayMap = getHolidayMap();
 
+  // Create a map of dates that already have leave applied (pending, manager_approved, approved)
+  const getExistingLeaveMap = () => {
+    const leaveMap = {};
+    leaves.forEach(leave => {
+      // Only block dates for leaves that are not rejected
+      if (leave.status === 'rejected') return;
+
+      // Get dates from the leave
+      const dates = leave.dates || [];
+      dates.forEach(dateStr => {
+        const date = new Date(dateStr);
+        const dateKey = formatDateKey(date.getFullYear(), date.getMonth(), date.getDate());
+        leaveMap[dateKey] = {
+          leave_type: leave.leave_type,
+          status: leave.status,
+          is_half_day: leave.is_half_day,
+          half_day_period: leave.half_day_period
+        };
+      });
+    });
+    return leaveMap;
+  };
+
+  const existingLeaveMap = getExistingLeaveMap();
+
   // Check if a date is a holiday
   const isHoliday = (dateKey) => {
     return !!holidayMap[dateKey];
@@ -98,6 +122,26 @@ const LeavesPage = () => {
   // Get holiday info for a date
   const getHolidayInfo = (dateKey) => {
     return holidayMap[dateKey] || null;
+  };
+
+  // Check if a date already has leave applied
+  const hasExistingLeave = (dateKey) => {
+    return !!existingLeaveMap[dateKey];
+  };
+
+  // Get existing leave info for a date
+  const getExistingLeaveInfo = (dateKey) => {
+    return existingLeaveMap[dateKey] || null;
+  };
+
+  // Get status display text
+  const getStatusDisplayText = (status) => {
+    const statusMap = {
+      pending: 'Pending',
+      manager_approved: 'Manager Approved',
+      approved: 'Approved'
+    };
+    return statusMap[status] || status;
   };
 
   // Calendar helper functions
@@ -119,7 +163,6 @@ const LeavesPage = () => {
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
   };
 
-
   const toggleDateSelection = (dateKey) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -134,6 +177,13 @@ const LeavesPage = () => {
     if (isHoliday(dateKey)) {
       const holiday = getHolidayInfo(dateKey);
       toast.error(`${holiday.name} - This is a holiday, no need to apply for leave`);
+      return;
+    }
+
+    // Check if date already has leave applied
+    if (hasExistingLeave(dateKey)) {
+      const leaveInfo = getExistingLeaveInfo(dateKey);
+      toast.error(`You already have ${leaveInfo.leave_type} (${getStatusDisplayText(leaveInfo.status)}) on this date`);
       return;
     }
 
@@ -309,20 +359,24 @@ const LeavesPage = () => {
       const config = selectedDates[dateKey];
       const holidayInfo = getHolidayInfo(dateKey);
       const isHolidayDate = !!holidayInfo;
+      const existingLeaveInfo = getExistingLeaveInfo(dateKey);
+      const hasLeave = !!existingLeaveInfo;
+      const isBlocked = isPast || isHolidayDate || hasLeave;
 
       const dayButton = (
         <button
           key={day}
           type="button"
-          onClick={() => !isPast && !isHolidayDate && toggleDateSelection(dateKey)}
-          disabled={isPast || isHolidayDate}
+          onClick={() => !isBlocked && toggleDateSelection(dateKey)}
+          disabled={isBlocked}
           className={`
             h-10 w-10 rounded-full text-sm font-medium transition-all relative
             ${isPast ? 'text-slate-300 cursor-not-allowed' : ''}
             ${isHolidayDate && !isPast ? 'bg-rose-100 text-rose-600 cursor-not-allowed border-2 border-rose-300' : ''}
-            ${!isPast && !isHolidayDate ? 'cursor-pointer hover:bg-slate-100' : ''}
-            ${isToday && !isSelected && !isHolidayDate ? 'ring-2 ring-blue-400 ring-offset-1' : ''}
-            ${isWeekend && !isSelected && !isHolidayDate ? 'text-slate-400' : ''}
+            ${hasLeave && !isPast && !isHolidayDate ? 'bg-blue-100 text-blue-600 cursor-not-allowed border-2 border-blue-300' : ''}
+            ${!isBlocked ? 'cursor-pointer hover:bg-slate-100' : ''}
+            ${isToday && !isSelected && !isBlocked ? 'ring-2 ring-blue-400 ring-offset-1' : ''}
+            ${isWeekend && !isSelected && !isBlocked ? 'text-slate-400' : ''}
             ${isSelected && config?.type === 'full' ? 'bg-emerald-500 text-white hover:bg-emerald-600' : ''}
             ${isSelected && config?.type === 'half' ? 'bg-amber-400 text-white hover:bg-amber-500' : ''}
           `}
@@ -336,10 +390,13 @@ const LeavesPage = () => {
           {isHolidayDate && (
             <Star className="absolute -top-1 -right-1 w-3 h-3 text-rose-500 fill-rose-500" />
           )}
+          {hasLeave && !isHolidayDate && (
+            <FileText className="absolute -top-1 -right-1 w-3 h-3 text-blue-500" />
+          )}
         </button>
       );
 
-      // Wrap holiday dates with tooltip
+      // Wrap blocked dates with tooltip
       if (isHolidayDate) {
         days.push(
           <TooltipProvider key={day}>
@@ -351,6 +408,23 @@ const LeavesPage = () => {
                 <p className="font-medium">{holidayInfo.name}</p>
                 {holidayInfo.type && (
                   <p className="text-xs opacity-80 capitalize">{holidayInfo.type} Holiday</p>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      } else if (hasLeave && !isPast) {
+        days.push(
+          <TooltipProvider key={day}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {dayButton}
+              </TooltipTrigger>
+              <TooltipContent side="top" className="bg-blue-600 text-white">
+                <p className="font-medium">{existingLeaveInfo.leave_type}</p>
+                <p className="text-xs opacity-80">{getStatusDisplayText(existingLeaveInfo.status)}</p>
+                {existingLeaveInfo.is_half_day && (
+                  <p className="text-xs opacity-80 capitalize">Half Day ({existingLeaveInfo.half_day_period})</p>
                 )}
               </TooltipContent>
             </Tooltip>
@@ -412,6 +486,16 @@ const LeavesPage = () => {
     return holidayDate.getMonth() === currentMonth.getMonth() &&
       holidayDate.getFullYear() === currentMonth.getFullYear();
   }).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  // Get existing leaves for current month for display
+  const currentMonthLeaves = leaves.filter(leave => {
+    if (leave.status === 'rejected') return false;
+    return leave.dates?.some(dateStr => {
+      const date = new Date(dateStr);
+      return date.getMonth() === currentMonth.getMonth() &&
+        date.getFullYear() === currentMonth.getFullYear();
+    });
+  });
 
   if (loading) {
     return (
@@ -503,7 +587,7 @@ const LeavesPage = () => {
                     {renderCalendar()}
 
                     {/* Legend */}
-                    <div className="mt-4 pt-4 border-t border-slate-200 flex flex-wrap gap-4 text-xs">
+                    <div className="mt-4 pt-4 border-t border-slate-200 flex flex-wrap gap-3 text-xs">
                       <div className="flex items-center gap-2">
                         <div className="w-4 h-4 rounded-full bg-emerald-500"></div>
                         <span className="text-slate-600">Full Day</span>
@@ -517,6 +601,12 @@ const LeavesPage = () => {
                           <Star className="absolute -top-1 -right-1 w-2 h-2 text-rose-500 fill-rose-500" />
                         </div>
                         <span className="text-slate-600">Holiday</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full bg-blue-100 border-2 border-blue-300 relative">
+                          <FileText className="absolute -top-1 -right-1 w-2 h-2 text-blue-500" />
+                        </div>
+                        <span className="text-slate-600">Leave Applied</span>
                       </div>
                     </div>
 
@@ -532,6 +622,31 @@ const LeavesPage = () => {
                                 {format(new Date(holiday.date), 'MMM dd')}
                               </span>
                               <span className="text-slate-600">- {holiday.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Current Month Existing Leaves */}
+                    {currentMonthLeaves.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-slate-200">
+                        <p className="text-xs font-medium text-slate-500 mb-2">Your leaves this month:</p>
+                        <div className="space-y-1">
+                          {currentMonthLeaves.map((leave, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-xs flex-wrap">
+                              <FileText className="w-3 h-3 text-blue-500" />
+                              <span className="text-blue-600 font-medium">
+                                {formatLeaveDates(leave.dates?.filter(d => {
+                                  const date = new Date(d);
+                                  return date.getMonth() === currentMonth.getMonth() &&
+                                    date.getFullYear() === currentMonth.getFullYear();
+                                }))}
+                              </span>
+                              <span className="text-slate-600">- {leave.leave_type}</span>
+                              <Badge className={`text-[10px] px-1.5 py-0 ${getStatusBadge(leave.status)}`}>
+                                {getStatusText(leave.status)}
+                              </Badge>
                             </div>
                           ))}
                         </div>

@@ -137,9 +137,18 @@ const LeaveBalancePage = () => {
         const response = await api.get('/leaves/all');
         allLeaves = response.data || [];
       } else {
-        // Fetch leaves for specific employee
+        // Fetch leaves for specific employee - this returns events with singular 'date' field
         const response = await api.get(`/leaves/calendar/${calendarEmployee}?year=${year}&month=${month}`);
-        allLeaves = response.data.events || [];
+        const events = response.data.events || [];
+
+        // Transform events to have 'dates' array format for consistency
+        allLeaves = events.map(event => ({
+          ...event,
+          // Convert singular 'date' to 'dates' array
+          dates: event.date ? [event.date] : [],
+          employee_name: response.data.employee?.name || '',
+          days_count: event.total_days_in_application || 1
+        }));
       }
 
       // Process leaves for calendar display
@@ -157,7 +166,7 @@ const LeaveBalancePage = () => {
           leave_type: leaveType,
           leave_type_key: leaveTypeKey,
           dates: normalizedDates,
-          colors: leaveColors[leaveTypeKey] || { bg: '#f1f5f9', border: '#64748b', text: '#334155' },
+          colors: leave.colors || leaveColors[leaveTypeKey] || { bg: '#f1f5f9', border: '#64748b', text: '#334155' },
           employee_name: leave.employee_name,
           status: leave.status || 'pending',
           days_count: leave.days_count || normalizedDates.length || 1,
@@ -190,7 +199,8 @@ const LeaveBalancePage = () => {
   const fetchCalendarHolidays = async () => {
     try {
       const year = currentDate.getFullYear();
-      const response = await api.get(`/holidays?year=${year}`);
+      const month = currentDate.getMonth() + 1;
+      const response = await api.get(`/holidays?year=${year}&month=${month}`);
       setCalendarHolidays(response.data || []);
     } catch (error) {
       console.error('Failed to fetch holidays:', error);
@@ -305,7 +315,11 @@ const LeaveBalancePage = () => {
 
   const getHolidayForDate = (date) => {
     const dateStr = formatLocalDate(date);
-    return calendarHolidays.find(h => h.date === dateStr);
+    return calendarHolidays.find(h => {
+      // Handle both string dates and ISO dates
+      const holidayDate = h.date ? normalizeToDateString(h.date) : '';
+      return holidayDate === dateStr;
+    });
   };
 
   const getStatusBadge = (status) => {

@@ -28,6 +28,9 @@ import SalaryTemplatePage from '@/pages/SalaryTemplatePage';
 import SetupPage from '@/pages/SetupPage';
 import Layout from '@/components/Layout';
 import HolidaysPage from '@/pages/HolidaysPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
+import AttendancePage from './pages/AttendancePage';
 
 
 const ProtectedRoute = ({ children }) => {
@@ -93,6 +96,9 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+
           <Route
             path="/"
             element={
@@ -119,6 +125,8 @@ function App() {
             <Route path="hierarchy" element={<HierarchyPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="holidays" element={<HolidaysPage />} />
+            <Route path="/attendance" element={<AttendancePage />} />
+
 
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

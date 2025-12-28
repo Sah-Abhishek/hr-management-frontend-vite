@@ -70,7 +70,7 @@ const EmployeesPage = () => {
       const response = await api.get('/employees');
       setEmployees(response.data);
       // Filter managers for dropdown
-      const managerList = response.data.filter(emp => 
+      const managerList = response.data.filter(emp =>
         emp.role === 'manager' || emp.role === 'admin'
       );
       setManagers(managerList);
@@ -111,7 +111,7 @@ const EmployeesPage = () => {
       if (error.response?.data?.detail) {
         const detail = error.response.data.detail;
         if (Array.isArray(detail)) {
-          errorMessage = detail.map(err => 
+          errorMessage = detail.map(err =>
             typeof err === 'object' && err.msg ? err.msg : String(err)
           ).join('; ');
         } else if (typeof detail === 'string') {
@@ -135,7 +135,7 @@ const EmployeesPage = () => {
 
     try {
       const originalEmployee = employees.find(emp => emp.id === selectedEmployee.id);
-      
+
       // First update the employee profile
       await api.put(`/employees/${selectedEmployee.id}`, {
         full_name: selectedEmployee.full_name,
@@ -160,7 +160,7 @@ const EmployeesPage = () => {
           role: selectedEmployee.role
         });
       }
-      
+
       toast.success('Employee updated successfully!');
       setEditDialogOpen(false);
       setSelectedEmployee(null);
@@ -170,7 +170,7 @@ const EmployeesPage = () => {
       if (error.response?.data?.detail) {
         const detail = error.response.data.detail;
         if (Array.isArray(detail)) {
-          errorMessage = detail.map(err => 
+          errorMessage = detail.map(err =>
             typeof err === 'object' && err.msg ? err.msg : String(err)
           ).join('; ');
         } else if (typeof detail === 'string') {
@@ -185,17 +185,44 @@ const EmployeesPage = () => {
 
   // Filter and search employees
   const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = searchTerm === '' || 
+    const matchesSearch = searchTerm === '' ||
       emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.designation.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     const matchesDepartment = filterDepartment === '' || filterDepartment === 'all' || emp.department === filterDepartment;
     const matchesRole = filterRole === '' || filterRole === 'all' || emp.role === filterRole;
     const matchesOrganization = filterOrganization === '' || filterOrganization === 'all' || emp.organization_id === filterOrganization;
-    
+
     return matchesSearch && matchesDepartment && matchesRole && matchesOrganization;
   });
+
+  // Helper function to get initials from name
+  const getInitials = (name) => {
+    if (!name) return '?';
+    const parts = name.trim().split(' ');
+    if (parts.length === 1) return parts[0][0]?.toUpperCase() || '?';
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  // Helper function to generate a consistent color based on name
+  const getAvatarColor = (name) => {
+    const colors = [
+      'bg-blue-500',
+      'bg-emerald-500',
+      'bg-purple-500',
+      'bg-amber-500',
+      'bg-rose-500',
+      'bg-cyan-500',
+      'bg-indigo-500',
+      'bg-pink-500',
+      'bg-teal-500',
+      'bg-orange-500',
+    ];
+    if (!name) return colors[0];
+    const index = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
+    return colors[index];
+  };
 
   if (loading) {
     return (
@@ -345,7 +372,6 @@ const EmployeesPage = () => {
       </div>
 
       {/* Edit Employee Dialog */}
-      {/* Edit Employee Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -354,16 +380,6 @@ const EmployeesPage = () => {
 
           {selectedEmployee && (
             <form onSubmit={handleUpdateEmployee} className="space-y-4 mt-4">
-
-              {/* Employee ID (READ ONLY) */}
-              {/* <div>
-                <Label>Employee ID</Label>
-                <Input
-                  value={selectedEmployee.employee_id}
-                  disabled
-                  className="mt-1 bg-slate-100 cursor-not-allowed"
-                />
-              </div> */}
 
               {/* Full Name */}
               <div>
@@ -470,7 +486,7 @@ const EmployeesPage = () => {
                 </p>
               </div>
 
-              {/* ✅ MANAGER SELECT (ONLY FOR EMPLOYEES) */}
+              {/* MANAGER SELECT (ONLY FOR EMPLOYEES) */}
               {selectedEmployee.role === 'employee' && (
                 <div>
                   <Label>Manager</Label>
@@ -624,8 +640,26 @@ const EmployeesPage = () => {
           >
             <CardContent className="p-6">
               <div className="flex items-start gap-4 mb-4">
-                <div className="w-14 h-14 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
-                  <User className="w-7 h-7 text-slate-600" />
+                {/* Profile Picture / Avatar */}
+                <div className="w-14 h-14 rounded-full flex-shrink-0 overflow-hidden ring-2 ring-slate-100">
+                  {employee.profile_picture_url ? (
+                    <img
+                      src={employee.profile_picture_url}
+                      alt={employee.full_name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // Fallback to initials if image fails to load
+                        e.target.style.display = 'none';
+                        e.target.nextSibling.style.display = 'flex';
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className={`w-full h-full ${getAvatarColor(employee.full_name)} flex items-center justify-center text-white font-semibold text-lg`}
+                    style={{ display: employee.profile_picture_url ? 'none' : 'flex' }}
+                  >
+                    {getInitials(employee.full_name)}
+                  </div>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -667,7 +701,7 @@ const EmployeesPage = () => {
                     {employee.designation} - {employee.department}
                   </span>
                 </div>
-                
+
                 {employee.organization_name && (
                   <div className="mt-2 pt-2 border-t border-slate-100">
                     <Badge variant="outline" className="text-xs">
@@ -681,15 +715,15 @@ const EmployeesPage = () => {
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <p className="text-xs text-slate-500">Sick</p>
-                    <p className="text-sm font-semibold text-slate-900">{employee.leave_balance.sick_leave}</p>
+                    <p className="text-sm font-semibold text-slate-900">{employee.leave_balance?.sick_leave ?? 0}</p>
                   </div>
                   <div>
                     <p className="text-xs text-slate-500">Casual</p>
-                    <p className="text-sm font-semibold text-slate-900">{employee.leave_balance.casual_leave}</p>
+                    <p className="text-sm font-semibold text-slate-900">{employee.leave_balance?.casual_leave ?? 0}</p>
                   </div>
                   <div>
                     <p className="text-xs text-slate-500">Paid</p>
-                    <p className="text-sm font-semibold text-slate-900">{employee.leave_balance.paid_leave}</p>
+                    <p className="text-sm font-semibold text-slate-900">{employee.leave_balance?.paid_leave ?? 0}</p>
                   </div>
                 </div>
               </div>
