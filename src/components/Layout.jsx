@@ -65,7 +65,7 @@ const Layout = () => {
     { name: 'Attendance', href: '/attendance', icon: ClipboardCheck, roles: ['admin',] },
     { name: 'My Leaves', href: '/leaves', icon: FileText, roles: ['admin', 'manager', 'employee'] },
     { name: 'All Leaves', href: '/all-leaves', icon: ClipboardList, roles: ['admin'] },
-    { name: 'Holidays', href: '/holidays', icon: ClipboardList, roles: ['admin', 'admin', 'manager'] },
+    { name: 'Holidays', href: '/holidays', icon: ClipboardList, roles: ['admin', 'employee', 'manager'] },
     { name: 'Leave Balance', href: '/leave-balance', icon: Wallet, roles: ['admin', 'manager'] },
     { name: 'Comp-Off', href: '/comp-off', icon: Gift, roles: ['admin', 'manager'] },
     // { name: 'mycompoff', href: '/mycompoff', icon: Gift, roles: ['employee', 'manager'] },
