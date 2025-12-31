@@ -31,6 +31,11 @@ import HolidaysPage from '@/pages/HolidaysPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import AttendancePage from './pages/AttendancePage';
+import MyReimbursementsPage from './pages/MyReimbursementPage';
+import AdminReimbursementsPage from './pages/AdminReimbursementPage';
+import MyCompOffPage from './pages/MyCompoffPage';
+import CompOffApprovalsPage from './pages/CompoffApprovalPage';
+import AdminCompOffPage from './pages/AdminCompoffPage';
 
 
 const ProtectedRoute = ({ children }) => {
@@ -126,6 +131,11 @@ function App() {
             <Route path="profile" element={<ProfilePage />} />
             <Route path="holidays" element={<HolidaysPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
+            <Route path="/myreimbursements" element={<MyReimbursementsPage />} />
+            <Route path="/adminreimbursements" element={<AdminReimbursementsPage />} />
+            <Route path="/mycompoff" element={<MyCompOffPage />} />
+            <Route path="/compoffapproval" element={<CompOffApprovalsPage />} />
+            <Route path="/admincompoff" element={<AdminCompOffPage />} />
 
 
           </Route>

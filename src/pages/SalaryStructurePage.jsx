@@ -23,23 +23,19 @@ const SalaryStructurePage = () => {
 
   // Unpaid leave states
   const [unpaidLeaves, setUnpaidLeaves] = useState([]);
-  const [unpaidLeaveDays, setUnpaidLeaveDays] = useState(0);
+  const [unpaidFullDays, setUnpaidFullDays] = useState(0);
+  const [unpaidHalfDays, setUnpaidHalfDays] = useState(0);
   const [deductUnpaidLeaves, setDeductUnpaidLeaves] = useState(true);
-  const [deductionMethod, setDeductionMethod] = useState('basic_30');
   const [showLeaveDetails, setShowLeaveDetails] = useState(false);
+
+  // Manual deduction rates
+  const [perFullDayDeduction, setPerFullDayDeduction] = useState(0);
+  const [perHalfDayDeduction, setPerHalfDayDeduction] = useState(0);
 
   const [salaryStructure, setSalaryStructure] = useState({
     basic_salary: 0,
     components: []
   });
-
-  // Deduction method options
-  const deductionMethods = [
-    { value: 'basic_30', label: 'Basic ÷ 30 days', description: 'Per day = Basic Salary / 30' },
-    { value: 'basic_calendar', label: 'Basic ÷ Calendar Days', description: 'Per day = Basic Salary / Days in Month' },
-    { value: 'gross_30', label: 'Gross ÷ 30 days', description: 'Per day = Gross Salary / 30' },
-    { value: 'gross_calendar', label: 'Gross ÷ Calendar Days', description: 'Per day = Gross Salary / Days in Month' },
-  ];
 
   useEffect(() => {
     fetchEmployees();
@@ -90,7 +86,9 @@ const SalaryStructurePage = () => {
         });
       });
 
-      let totalDays = 0;
+      let fullDays = 0;
+      let halfDays = 0;
+
       unpaidLeavesForMonth.forEach(leave => {
         const daysInMonth = leave.dates?.filter(dateStr => {
           const date = new Date(dateStr);
@@ -99,18 +97,20 @@ const SalaryStructurePage = () => {
         }).length || 0;
 
         if (leave.is_half_day) {
-          totalDays += daysInMonth * 0.5;
+          halfDays += daysInMonth;
         } else {
-          totalDays += daysInMonth;
+          fullDays += daysInMonth;
         }
       });
 
       setUnpaidLeaves(unpaidLeavesForMonth);
-      setUnpaidLeaveDays(totalDays);
+      setUnpaidFullDays(fullDays);
+      setUnpaidHalfDays(halfDays);
     } catch (error) {
       console.error('Failed to fetch unpaid leaves:', error);
       setUnpaidLeaves([]);
-      setUnpaidLeaveDays(0);
+      setUnpaidFullDays(0);
+      setUnpaidHalfDays(0);
     }
   };
 
@@ -120,6 +120,10 @@ const SalaryStructurePage = () => {
     setSelectedEmployeeData(empData);
     setLoading(true);
 
+    // Reset deduction rates when employee changes
+    setPerFullDayDeduction(0);
+    setPerHalfDayDeduction(0);
+
     try {
       const response = await api.get(`/salary-structure/${empId}`);
       if (response.data) {
@@ -127,6 +131,12 @@ const SalaryStructurePage = () => {
           basic_salary: response.data.basic_salary || 0,
           components: response.data.components || []
         });
+
+        // Set default deduction rates based on basic salary / 30
+        const basic = response.data.basic_salary || 0;
+        const defaultPerDay = Math.round(basic / 30);
+        setPerFullDayDeduction(defaultPerDay);
+        setPerHalfDayDeduction(Math.round(defaultPerDay / 2));
       } else {
         initializeFromTemplate(empData);
       }
@@ -172,6 +182,11 @@ const SalaryStructurePage = () => {
       basic_salary: basicSalary,
       components: initialComponents
     });
+
+    // Set default deduction rates
+    const defaultPerDay = Math.round(basicSalary / 30);
+    setPerFullDayDeduction(defaultPerDay);
+    setPerHalfDayDeduction(Math.round(defaultPerDay / 2));
   };
 
   const addComponent = (type) => {
@@ -206,30 +221,17 @@ const SalaryStructurePage = () => {
     return new Date(parseInt(year), parseInt(month), 0).getDate();
   };
 
-  const calculateUnpaidDeduction = (basic, gross) => {
-    if (!deductUnpaidLeaves || unpaidLeaveDays === 0) return 0;
+  const calculateUnpaidDeduction = () => {
+    if (!deductUnpaidLeaves) return 0;
 
-    const daysInMonth = getDaysInMonth();
-    let perDayRate = 0;
+    const fullDayDeduction = unpaidFullDays * (parseFloat(perFullDayDeduction) || 0);
+    const halfDayDeduction = unpaidHalfDays * (parseFloat(perHalfDayDeduction) || 0);
 
-    switch (deductionMethod) {
-      case 'basic_30':
-        perDayRate = basic / 30;
-        break;
-      case 'basic_calendar':
-        perDayRate = basic / daysInMonth;
-        break;
-      case 'gross_30':
-        perDayRate = gross / 30;
-        break;
-      case 'gross_calendar':
-        perDayRate = gross / daysInMonth;
-        break;
-      default:
-        perDayRate = basic / 30;
-    }
+    return Math.round(fullDayDeduction + halfDayDeduction);
+  };
 
-    return Math.round(perDayRate * unpaidLeaveDays);
+  const getTotalUnpaidDays = () => {
+    return unpaidFullDays + (unpaidHalfDays * 0.5);
   };
 
   const calculateTotals = () => {
@@ -253,7 +255,7 @@ const SalaryStructurePage = () => {
     });
 
     const grossSalary = totalEarnings;
-    const unpaidDeduction = calculateUnpaidDeduction(basic, grossSalary);
+    const unpaidDeduction = calculateUnpaidDeduction();
     const finalDeductions = totalDeductions + unpaidDeduction;
 
     return {
@@ -300,9 +302,11 @@ const SalaryStructurePage = () => {
       await api.post('/payroll/send-detailed-salary-slip', {
         employee_id: selectedEmployee,
         month: selectedMonth,
-        unpaid_leave_days: deductUnpaidLeaves ? unpaidLeaveDays : 0,
-        unpaid_leave_deduction: deductUnpaidLeaves ? totals.unpaidDeduction : 0,
-        deduction_method: deductionMethod
+        unpaid_full_days: deductUnpaidLeaves ? unpaidFullDays : 0,
+        unpaid_half_days: deductUnpaidLeaves ? unpaidHalfDays : 0,
+        per_full_day_deduction: deductUnpaidLeaves ? parseFloat(perFullDayDeduction) || 0 : 0,
+        per_half_day_deduction: deductUnpaidLeaves ? parseFloat(perHalfDayDeduction) || 0 : 0,
+        unpaid_leave_deduction: deductUnpaidLeaves ? totals.unpaidDeduction : 0
       });
       toast.success('Salary slip sent successfully');
     } catch (error) {
@@ -417,25 +421,30 @@ const SalaryStructurePage = () => {
                   </div>
 
                   {/* Unpaid Leave Deduction Section */}
-                  <div className={`rounded-xl border-2 transition-all duration-300 overflow-hidden ${deductUnpaidLeaves && unpaidLeaveDays > 0 ? 'border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50' : 'border-slate-200 bg-slate-50'}`}>
+                  <div className={`rounded-xl border-2 transition-all duration-300 overflow-hidden ${deductUnpaidLeaves && (unpaidFullDays > 0 || unpaidHalfDays > 0) ? 'border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50' : 'border-slate-200 bg-slate-50'}`}>
                     <div className="p-5">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className={`p-2.5 rounded-xl transition-colors ${deductUnpaidLeaves && unpaidLeaveDays > 0 ? 'bg-amber-200' : 'bg-slate-200'}`}>
-                            <Calendar className={`w-5 h-5 ${deductUnpaidLeaves && unpaidLeaveDays > 0 ? 'text-amber-700' : 'text-slate-600'}`} />
+                          <div className={`p-2.5 rounded-xl transition-colors ${deductUnpaidLeaves && (unpaidFullDays > 0 || unpaidHalfDays > 0) ? 'bg-amber-200' : 'bg-slate-200'}`}>
+                            <Calendar className={`w-5 h-5 ${deductUnpaidLeaves && (unpaidFullDays > 0 || unpaidHalfDays > 0) ? 'text-amber-700' : 'text-slate-600'}`} />
                           </div>
                           <div>
                             <h3 className="font-semibold text-slate-800 text-lg">Unpaid Leave Deduction</h3>
                             <p className="text-sm text-slate-600">
-                              {unpaidLeaveDays > 0
-                                ? <span className="font-medium text-amber-700">{unpaidLeaveDays} unpaid leave day{unpaidLeaveDays !== 1 ? 's' : ''} found in {monthName}</span>
+                              {(unpaidFullDays > 0 || unpaidHalfDays > 0)
+                                ? <span className="font-medium text-amber-700">
+                                  {unpaidFullDays > 0 && `${unpaidFullDays} full day${unpaidFullDays !== 1 ? 's' : ''}`}
+                                  {unpaidFullDays > 0 && unpaidHalfDays > 0 && ', '}
+                                  {unpaidHalfDays > 0 && `${unpaidHalfDays} half day${unpaidHalfDays !== 1 ? 's' : ''}`}
+                                  {' in '}{monthName}
+                                </span>
                                 : <span className="text-slate-500">No unpaid leaves in {monthName}</span>
                               }
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-4">
-                          {unpaidLeaveDays > 0 && (
+                          {(unpaidFullDays > 0 || unpaidHalfDays > 0) && (
                             <Badge className={`text-sm px-3 py-1 ${deductUnpaidLeaves ? 'bg-amber-600 hover:bg-amber-600' : 'bg-slate-400 hover:bg-slate-400'}`}>
                               {deductUnpaidLeaves ? `- ₹${totals.unpaidDeduction.toLocaleString()}` : 'Not Applied'}
                             </Badge>
@@ -445,51 +454,83 @@ const SalaryStructurePage = () => {
                             <Switch
                               checked={deductUnpaidLeaves}
                               onCheckedChange={setDeductUnpaidLeaves}
-                              disabled={unpaidLeaveDays === 0}
+                              disabled={unpaidFullDays === 0 && unpaidHalfDays === 0}
                               className="data-[state=checked]:bg-amber-600"
                             />
                           </div>
                         </div>
                       </div>
 
-                      {/* Deduction Method Selection */}
-                      {deductUnpaidLeaves && unpaidLeaveDays > 0 && (
+                      {/* Manual Deduction Rate Inputs */}
+                      {deductUnpaidLeaves && (unpaidFullDays > 0 || unpaidHalfDays > 0) && (
                         <div className="mt-5 pt-5 border-t border-amber-200 space-y-4">
                           <div>
-                            <Label className="text-sm font-semibold text-amber-800 mb-2 block">
-                              Deduction Calculation Method
+                            <Label className="text-sm font-semibold text-amber-800 mb-3 block">
+                              Configure Deduction Rates
                             </Label>
-                            <Select value={deductionMethod} onValueChange={setDeductionMethod}>
-                              <SelectTrigger className="bg-white border-amber-200 hover:border-amber-300 h-11">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {deductionMethods.map(method => (
-                                  <SelectItem key={method.value} value={method.value}>
-                                    <div className="py-1">
-                                      <div className="font-medium">{method.label}</div>
-                                      <div className="text-xs text-slate-500">{method.description}</div>
-                                    </div>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {/* Per Full Day Deduction */}
+                              <div className="p-4 bg-white rounded-xl border border-amber-200 shadow-sm">
+                                <Label className="text-sm font-medium text-slate-700 mb-2 block">
+                                  Per Full Day Deduction
+                                </Label>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-lg font-bold text-amber-600">₹</span>
+                                  <Input
+                                    type="number"
+                                    value={perFullDayDeduction}
+                                    onChange={(e) => setPerFullDayDeduction(parseFloat(e.target.value) || 0)}
+                                    className="bg-amber-50 border-amber-200 focus:border-amber-400 focus:ring-amber-200 font-semibold"
+                                    placeholder="Enter amount"
+                                  />
+                                </div>
+                                <p className="text-xs text-slate-500 mt-2">
+                                  Applied to {unpaidFullDays} full day{unpaidFullDays !== 1 ? 's' : ''}
+                                </p>
+                              </div>
+
+                              {/* Per Half Day Deduction */}
+                              <div className="p-4 bg-white rounded-xl border border-amber-200 shadow-sm">
+                                <Label className="text-sm font-medium text-slate-700 mb-2 block">
+                                  Per Half Day Deduction
+                                </Label>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-lg font-bold text-amber-600">₹</span>
+                                  <Input
+                                    type="number"
+                                    value={perHalfDayDeduction}
+                                    onChange={(e) => setPerHalfDayDeduction(parseFloat(e.target.value) || 0)}
+                                    className="bg-amber-50 border-amber-200 focus:border-amber-400 focus:ring-amber-200 font-semibold"
+                                    placeholder="Enter amount"
+                                  />
+                                </div>
+                                <p className="text-xs text-slate-500 mt-2">
+                                  Applied to {unpaidHalfDays} half day{unpaidHalfDays !== 1 ? 's' : ''}
+                                </p>
+                              </div>
+                            </div>
                           </div>
 
                           {/* Calculation Preview */}
                           <div className="p-4 bg-white rounded-xl border border-amber-200 shadow-sm">
                             <div className="text-xs text-amber-700 font-semibold mb-3 uppercase tracking-wide">Calculation Preview</div>
                             <div className="space-y-2">
-                              <div className="flex justify-between text-sm">
-                                <span className="text-slate-600">Per Day Rate:</span>
-                                <span className="font-semibold text-slate-800">
-                                  ₹{Math.round(totals.unpaidDeduction / unpaidLeaveDays).toLocaleString()}
-                                </span>
-                              </div>
-                              <div className="flex justify-between text-sm">
-                                <span className="text-slate-600">Unpaid Days:</span>
-                                <span className="font-semibold text-slate-800">{unpaidLeaveDays}</span>
-                              </div>
+                              {unpaidFullDays > 0 && (
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-slate-600">Full Days ({unpaidFullDays} × ₹{parseFloat(perFullDayDeduction).toLocaleString()}):</span>
+                                  <span className="font-semibold text-slate-800">
+                                    ₹{(unpaidFullDays * (parseFloat(perFullDayDeduction) || 0)).toLocaleString()}
+                                  </span>
+                                </div>
+                              )}
+                              {unpaidHalfDays > 0 && (
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-slate-600">Half Days ({unpaidHalfDays} × ₹{parseFloat(perHalfDayDeduction).toLocaleString()}):</span>
+                                  <span className="font-semibold text-slate-800">
+                                    ₹{(unpaidHalfDays * (parseFloat(perHalfDayDeduction) || 0)).toLocaleString()}
+                                  </span>
+                                </div>
+                              )}
                               <div className="flex justify-between pt-3 mt-2 border-t border-amber-100">
                                 <span className="font-semibold text-amber-800">Total Deduction:</span>
                                 <span className="font-bold text-lg text-amber-700">₹{totals.unpaidDeduction.toLocaleString()}</span>
@@ -812,11 +853,13 @@ const SalaryStructurePage = () => {
                         <span className="font-bold text-red-700">- ₹{totals.totalDeductions.toLocaleString()}</span>
                       </div>
 
-                      {deductUnpaidLeaves && unpaidLeaveDays > 0 && (
+                      {deductUnpaidLeaves && (unpaidFullDays > 0 || unpaidHalfDays > 0) && (
                         <div className="flex justify-between py-3 px-4 bg-amber-50 rounded-xl border border-amber-200">
                           <div>
                             <span className="text-amber-700 font-medium">Unpaid Leave</span>
-                            <span className="text-xs text-amber-600 ml-1.5 bg-amber-100 px-2 py-0.5 rounded-full">{unpaidLeaveDays} days</span>
+                            <span className="text-xs text-amber-600 ml-1.5 bg-amber-100 px-2 py-0.5 rounded-full">
+                              {getTotalUnpaidDays()} days
+                            </span>
                           </div>
                           <span className="font-bold text-amber-700">- ₹{totals.unpaidDeduction.toLocaleString()}</span>
                         </div>
@@ -890,15 +933,15 @@ const SalaryStructurePage = () => {
                     </div>
                     <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl text-center border border-amber-100">
                       <p className="text-2xl font-bold text-amber-700">
-                        {unpaidLeaveDays}
+                        {unpaidFullDays}
                       </p>
-                      <p className="text-xs text-amber-600 font-medium">Unpaid Days</p>
+                      <p className="text-xs text-amber-600 font-medium">Full Days</p>
                     </div>
                     <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl text-center border border-blue-100">
                       <p className="text-2xl font-bold text-blue-700">
-                        {getDaysInMonth()}
+                        {unpaidHalfDays}
                       </p>
-                      <p className="text-xs text-blue-600 font-medium">Days in Month</p>
+                      <p className="text-xs text-blue-600 font-medium">Half Days</p>
                     </div>
                   </div>
                 </CardContent>

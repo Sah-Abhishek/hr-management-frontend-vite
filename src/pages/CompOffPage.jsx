@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Gift, Calendar, Search, Clock } from 'lucide-react';
+import { Gift, Calendar, Search, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -50,7 +50,7 @@ const CompOffPage = () => {
 
       setEmployees(emps);
 
-      // Fetch comp-off records
+      // Fetch comp-off records from the new endpoint
       const compOffResponse = await api.get('/comp-off/records');
       setCompOffRecords(compOffResponse.data || []);
     } catch (error) {
@@ -92,7 +92,7 @@ const CompOffPage = () => {
 
     try {
       await api.post('/comp-off/grant', {
-        user_id: selectedEmployee.id, // ✅ USER UUID
+        user_id: selectedEmployee.id, // User UUID from users collection
         days: parseFloat(compOffForm.days),
         work_date: compOffForm.work_date,
         reason: compOffForm.reason,
@@ -111,17 +111,52 @@ const CompOffPage = () => {
     }
   };
 
-  const getEmployeeCompOff = (employeeId) => {
+  // Calculate comp-off balance for an employee
+  const getEmployeeCompOff = (employeeEmail) => {
+    // Filter records by employee email and only approved ones
     const records = compOffRecords.filter(
-      r => r.employee_id === employeeId
+      r => r.employee_email === employeeEmail && r.status === 'approved'
     );
 
     const total = records.reduce((sum, r) => sum + (r.days || 0), 0);
     const used = records.reduce((sum, r) => sum + (r.used || 0), 0);
+    const remaining = records.reduce((sum, r) => sum + (r.remaining_days || r.days || 0), 0);
 
-    return { total, used, available: total - used };
+    return { total, used, available: remaining };
   };
 
+  // Get records for a specific employee
+  const getEmployeeRecords = (employeeEmail) => {
+    return compOffRecords.filter(r => r.employee_email === employeeEmail);
+  };
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'approved':
+        return (
+          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
+            <CheckCircle className="w-3 h-3 mr-1" />
+            Approved
+          </Badge>
+        );
+      case 'pending':
+        return (
+          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100">
+            <Clock className="w-3 h-3 mr-1" />
+            Pending
+          </Badge>
+        );
+      case 'rejected':
+        return (
+          <Badge className="bg-red-100 text-red-700 hover:bg-red-100">
+            <XCircle className="w-3 h-3 mr-1" />
+            Rejected
+          </Badge>
+        );
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
 
   if (loading) {
     return (
@@ -150,8 +185,8 @@ const CompOffPage = () => {
           <div className="flex-1">
             <p className="font-medium text-emerald-900 mb-1">What is Comp-Off?</p>
             <p className="text-sm text-emerald-700">
-              Compensatory off is granted to employees who work on holidays, weekends, or put in extra hours beyond normal working time. 
-              Only managers can grant comp-off to their team members.
+              Compensatory off is granted to employees who work on holidays, weekends, or put in extra hours beyond normal working time.
+              Comp-off must be used within 90 days from the work date.
             </p>
           </div>
         </div>
@@ -173,8 +208,8 @@ const CompOffPage = () => {
       {/* Employee Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {filteredEmployees.map((employee) => {
-          const compOffBalance = getEmployeeCompOff(employee.employee_id);
-          const employeeRecords = compOffRecords.filter(r => r.employee_id === employee.id);
+          const compOffBalance = getEmployeeCompOff(employee.email);
+          const employeeRecords = getEmployeeRecords(employee.email);
 
           return (
             <Card key={employee.id} className="border-slate-100 shadow-sm">
@@ -226,22 +261,40 @@ const CompOffPage = () => {
                 {employeeRecords.length > 0 && (
                   <div>
                     <p className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-2">
-                      Recent Grants
+                      Recent Records
                     </p>
                     <div className="space-y-2">
                       {employeeRecords.slice(0, 3).map((record, idx) => (
-                        <div key={idx} className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-sm">
+                        <div key={record.id || idx} className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-sm">
                           <div className="flex items-center justify-between mb-1">
-                            <span className="font-medium text-slate-900">{record.days} day(s)</span>
-                            <span className="text-xs text-slate-500">
-                              {format(new Date(record.granted_date), 'MMM dd, yyyy')}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-slate-900">{record.days} day(s)</span>
+                              {getStatusBadge(record.status)}
+                            </div>
+                            {record.granted_date && (
+                              <span className="text-xs text-slate-500">
+                                {format(new Date(record.granted_date), 'MMM dd, yyyy')}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-2 text-xs text-slate-600">
                             <Clock className="w-3 h-3" />
                             <span>Worked on: {format(new Date(record.work_date), 'MMM dd, yyyy')}</span>
                           </div>
-                          <p className="text-xs text-slate-600 mt-1">{record.reason}</p>
+                          <p className="text-xs text-slate-600 mt-1 truncate">{record.reason}</p>
+                          {record.expiry_date && record.status === 'approved' && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <AlertCircle className="w-3 h-3 text-amber-500" />
+                              <span className="text-xs text-amber-600">
+                                Expires: {format(new Date(record.expiry_date), 'MMM dd, yyyy')}
+                              </span>
+                            </div>
+                          )}
+                          {record.remaining_days !== undefined && record.status === 'approved' && (
+                            <div className="text-xs text-emerald-600 mt-1">
+                              Remaining: {record.remaining_days} day(s)
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -250,7 +303,7 @@ const CompOffPage = () => {
 
                 {employeeRecords.length === 0 && (
                   <div className="text-center py-4 text-slate-500 text-sm">
-                    No comp-off granted yet
+                    No comp-off records yet
                   </div>
                 )}
               </CardContent>
@@ -275,7 +328,10 @@ const CompOffPage = () => {
       <Dialog open={grantDialogOpen} onOpenChange={setGrantDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Grant Comp-Off</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Gift className="w-5 h-5 text-emerald-600" />
+              Grant Comp-Off
+            </DialogTitle>
           </DialogHeader>
           {selectedEmployee && (
             <div className="space-y-4 mt-4">
@@ -285,29 +341,32 @@ const CompOffPage = () => {
               </div>
 
               <div>
-                <Label>Number of Days</Label>
+                <Label>Number of Days *</Label>
                 <Input
                   type="number"
                   step="0.5"
-                  min="0"
+                  min="0.5"
+                  max="5"
                   placeholder="e.g., 1 or 0.5"
                   value={compOffForm.days}
                   onChange={(e) => setCompOffForm({ ...compOffForm, days: e.target.value })}
                   className="mt-1"
                   data-testid="compoff-days-input"
                 />
-                <p className="text-xs text-slate-500 mt-1">Use 0.5 for half day</p>
+                <p className="text-xs text-slate-500 mt-1">Use 0.5 for half day, max 5 days</p>
               </div>
 
               <div>
-                <Label>Work Date (When they worked extra)</Label>
+                <Label>Work Date (When they worked extra) *</Label>
                 <Input
                   type="date"
                   value={compOffForm.work_date}
                   onChange={(e) => setCompOffForm({ ...compOffForm, work_date: e.target.value })}
+                  max={format(new Date(), 'yyyy-MM-dd')}
                   className="mt-1"
                   data-testid="compoff-workdate-input"
                 />
+                <p className="text-xs text-slate-500 mt-1">Cannot be a future date</p>
               </div>
 
               <div>
@@ -324,7 +383,8 @@ const CompOffPage = () => {
 
               <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
                 <p className="text-sm text-blue-800">
-                  <strong>Note:</strong> Comp-off days will be added to this employee's balance. They can use it like regular leave.
+                  <strong>Note:</strong> Comp-off will be directly approved and added to the employee's balance.
+                  It must be used within <strong>90 days</strong> from the work date.
                 </p>
               </div>
 
