@@ -198,9 +198,9 @@ const LoginPage = () => {
           </div>
 
           <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsList className="grid w-full grid-cols-1 mb-6">
               <TabsTrigger value="login" data-testid="login-tab">Login</TabsTrigger>
-              <TabsTrigger value="register" data-testid="register-tab">Register</TabsTrigger>
+              {/* <TabsTrigger value="register" data-testid="register-tab">Register</TabsTrigger> */}
             </TabsList>
 
             <TabsContent value="login">

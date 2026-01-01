@@ -174,20 +174,20 @@ const MyCompOffPage = () => {
         </div>
 
         {/* Info Banner */}
-        <div className="mb-6 bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-200 rounded-xl p-4 shadow-sm">
-          <div className="flex gap-3 items-start">
-            <div className="p-2 bg-violet-100 rounded-lg">
-              <Info className="w-5 h-5 text-violet-600" />
-            </div>
-            <div className="text-sm text-violet-900">
-              <p className="font-semibold mb-1">About Comp-Off</p>
-              <p>
-                If you worked on a holiday, you can request a compensatory off. Once approved,
-                you can use it as a leave within <strong>90 days</strong> of the work date.
-              </p>
-            </div>
-          </div>
-        </div>
+        {/* <div className="mb-6 bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-200 rounded-xl p-4 shadow-sm"> */}
+        {/*   <div className="flex gap-3 items-start"> */}
+        {/*     <div className="p-2 bg-violet-100 rounded-lg"> */}
+        {/*       <Info className="w-5 h-5 text-violet-600" /> */}
+        {/*     </div> */}
+        {/*     <div className="text-sm text-violet-900"> */}
+        {/*       <p className="font-semibold mb-1">About Comp-Off</p> */}
+        {/*       <p> */}
+        {/*         If you worked on a holiday, you can request a compensatory off. Once approved, */}
+        {/*         you can use it as a leave within <strong>90 days</strong> of the work date. */}
+        {/*       </p> */}
+        {/*     </div> */}
+        {/*   </div> */}
+        {/* </div> */}
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">

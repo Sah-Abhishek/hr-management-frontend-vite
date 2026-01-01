@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, ChevronLeft, ChevronRight, X, Clock, Sun, Sunset, Trash2, Star, FileText } from 'lucide-react';
+import { Plus, Calendar, ChevronLeft, ChevronRight, X, Clock, Sun, Sunset, Trash2, Star, FileText, Gift, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -18,6 +18,7 @@ const LeavesPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [leaveTypes, setLeaveTypes] = useState([]);
+  const [loadingTypes, setLoadingTypes] = useState(true);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [holidays, setHolidays] = useState([]);
 
@@ -26,27 +27,76 @@ const LeavesPage = () => {
   const [selectedDates, setSelectedDates] = useState({});
 
   const [leaveForm, setLeaveForm] = useState({
-    leave_type: 'Sick Leave',
+    leave_type: '',
     reason: '',
   });
 
   useEffect(() => {
     fetchLeaves();
-    loadLeaveTypes();
+    fetchLeaveTypesAndBalance();
     fetchHolidays();
   }, []);
 
-  const loadLeaveTypes = () => {
-    const saved = localStorage.getItem('leave_types');
-    if (saved) {
-      setLeaveTypes(JSON.parse(saved));
-    } else {
+  /**
+   * Fetch leave types from backend policy AND employee's current balance
+   */
+  const fetchLeaveTypesAndBalance = async () => {
+    setLoadingTypes(true);
+    try {
+      // Fetch leave policy (for quotas)
+      const policyResponse = await api.get('/leaves/leave-policy');
+      const policies = policyResponse.data?.policies || [];
+
+      // Fetch employee profile (for current balance)
+      const profileResponse = await api.get('/auth/me');
+      const balance = profileResponse.data?.leave_balance || {};
+
+      // Build leave types array with both quota and available balance
+      const types = policies.map(policy => {
+        const key = policy.leave_type.toLowerCase().replace(/ /g, '_');
+        return {
+          name: policy.leave_type,
+          key: key,
+          quota: policy.annual_quota || 0,
+          available: balance[key] ?? 0,
+          description: policy.description || '',
+          carryForward: policy.carry_forward || false,
+          maxCarryForward: policy.max_carry_forward || 0
+        };
+      });
+
+      // Add Comp Off (not in policy but always available as an option)
+      const compOffBalance = balance.comp_off ?? 0;
+      types.push({
+        name: 'Comp Off',
+        key: 'comp_off',
+        quota: 0, // No fixed quota - earned dynamically
+        available: compOffBalance,
+        description: 'Compensatory off for working on holidays/weekends',
+        isCompOff: true
+      });
+
+      setLeaveTypes(types);
+
+      // Set default leave type if not set
+      if (!leaveForm.leave_type && types.length > 0) {
+        setLeaveForm(prev => ({ ...prev, leave_type: types[0].name }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch leave types:', error);
+      toast.error('Failed to load leave types');
+
+      // Fallback to defaults
       setLeaveTypes([
-        { name: 'Sick Leave', quota: 12 },
-        { name: 'Casual Leave', quota: 12 },
-        { name: 'Paid Leave', quota: 15 },
-        { name: 'Unpaid Leave', quota: 0 }
+        { name: 'Sick Leave', key: 'sick_leave', quota: 12, available: 0 },
+        { name: 'Casual Leave', key: 'casual_leave', quota: 12, available: 0 },
+        { name: 'Paid Leave', key: 'paid_leave', quota: 15, available: 0 },
+        { name: 'Unpaid Leave', key: 'unpaid_leave', quota: 0, available: Infinity },
+        { name: 'Comp Off', key: 'comp_off', quota: 0, available: 0, isCompOff: true }
       ]);
+      setLeaveForm(prev => ({ ...prev, leave_type: 'Sick Leave' }));
+    } finally {
+      setLoadingTypes(false);
     }
   };
 
@@ -224,6 +274,21 @@ const LeavesPage = () => {
     }, 0);
   };
 
+  // Get selected leave type info
+  const getSelectedTypeInfo = () => {
+    return leaveTypes.find(t => t.name === leaveForm.leave_type);
+  };
+
+  // Check if balance is sufficient
+  const hasInsufficientBalance = () => {
+    const selectedType = getSelectedTypeInfo();
+    if (!selectedType) return false;
+    if (selectedType.name === 'Unpaid Leave') return false; // Unpaid has no limit
+
+    const totalDays = calculateTotalDays();
+    return selectedType.available < totalDays;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -235,6 +300,17 @@ const LeavesPage = () => {
     if (!leaveForm.reason.trim()) {
       toast.error('Please provide a reason for your leave');
       return;
+    }
+
+    // Check balance (except for Unpaid Leave)
+    const selectedType = getSelectedTypeInfo();
+    const totalDays = calculateTotalDays();
+
+    if (selectedType && selectedType.name !== 'Unpaid Leave') {
+      if (selectedType.available < totalDays) {
+        toast.error(`Insufficient ${selectedType.name} balance. Available: ${selectedType.available} days, Requested: ${totalDays} days`);
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -277,11 +353,12 @@ const LeavesPage = () => {
       toast.success(`Leave application${groupKeys.length > 1 ? 's' : ''} submitted successfully!`);
       setDialogOpen(false);
       setLeaveForm({
-        leave_type: 'Sick Leave',
+        leave_type: leaveTypes[0]?.name || 'Sick Leave',
         reason: '',
       });
       setSelectedDates({});
       fetchLeaves();
+      fetchLeaveTypesAndBalance(); // Refresh balance
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to submit leave application');
     } finally {
@@ -473,6 +550,17 @@ const LeavesPage = () => {
     return textMap[status] || status;
   };
 
+  const getLeaveTypeColor = (type) => {
+    const colors = {
+      'Sick Leave': 'border-red-200 bg-red-50',
+      'Casual Leave': 'border-blue-200 bg-blue-50',
+      'Paid Leave': 'border-emerald-200 bg-emerald-50',
+      'Unpaid Leave': 'border-amber-200 bg-amber-50',
+      'Comp Off': 'border-purple-200 bg-purple-50',
+    };
+    return colors[type] || 'border-slate-200 bg-slate-50';
+  };
+
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
@@ -519,7 +607,7 @@ const LeavesPage = () => {
           setDialogOpen(open);
           if (!open) {
             setSelectedDates({});
-            setLeaveForm({ leave_type: 'Sick Leave', reason: '' });
+            setLeaveForm({ leave_type: leaveTypes[0]?.name || 'Sick Leave', reason: '' });
           }
         }}>
           <DialogTrigger asChild>
@@ -536,21 +624,99 @@ const LeavesPage = () => {
               {/* Leave Type */}
               <div>
                 <Label htmlFor="leave-type">Leave Type</Label>
-                <Select
-                  value={leaveForm.leave_type}
-                  onValueChange={(value) => setLeaveForm({ ...leaveForm, leave_type: value })}
-                >
-                  <SelectTrigger data-testid="leave-type-select" className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {leaveTypes.map(type => (
-                      <SelectItem key={type.name} value={type.name}>
-                        {type.name} {type.quota > 0 && `(${type.quota} days/year)`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {loadingTypes ? (
+                  <div className="flex items-center gap-2 mt-2 text-slate-500">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading leave types...
+                  </div>
+                ) : (
+                  <>
+                    <Select
+                      value={leaveForm.leave_type}
+                      onValueChange={(value) => setLeaveForm({ ...leaveForm, leave_type: value })}
+                    >
+                      <SelectTrigger data-testid="leave-type-select" className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {leaveTypes.map(type => (
+                          <SelectItem key={type.name} value={type.name}>
+                            <div className="flex items-center gap-2">
+                              {type.isCompOff && <Gift className="w-4 h-4 text-purple-600" />}
+                              <span>{type.name}</span>
+                              <span className="text-xs text-slate-500 ml-2">
+                                {type.isCompOff ? (
+                                  `(${type.available} available)`
+                                ) : type.name === 'Unpaid Leave' ? (
+                                  '(Unlimited)'
+                                ) : (
+                                  `(${type.available}/${type.quota} left)`
+                                )}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {/* Balance Info for Selected Type */}
+                    {(() => {
+                      const selectedType = getSelectedTypeInfo();
+                      if (!selectedType) return null;
+
+                      if (selectedType.isCompOff) {
+                        return (
+                          <div className="mt-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <Gift className="w-4 h-4 text-purple-600" />
+                              <span className="text-sm text-purple-800">
+                                Available comp-off balance: <strong>{selectedType.available} days</strong>
+                              </span>
+                            </div>
+                            <p className="text-xs text-purple-600 mt-1">
+                              Earned from working on holidays/weekends
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      if (selectedType.name === 'Unpaid Leave') {
+                        return (
+                          <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <span className="text-sm text-amber-800">
+                              Unpaid leave has no limit but will be deducted from salary
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      const isLow = selectedType.available < 3 && selectedType.available > 0;
+                      const isEmpty = selectedType.available === 0;
+
+                      return (
+                        <div className={`mt-2 p-3 rounded-lg border ${isEmpty ? 'bg-red-50 border-red-200' :
+                          isLow ? 'bg-amber-50 border-amber-200' :
+                            'bg-slate-50 border-slate-200'
+                          }`}>
+                          <div className="flex items-center justify-between">
+                            <span className={`text-sm ${isEmpty ? 'text-red-800' :
+                              isLow ? 'text-amber-800' :
+                                'text-slate-800'
+                              }`}>
+                              Available: <strong>{selectedType.available}</strong> of {selectedType.quota} days
+                            </span>
+                            {isEmpty && (
+                              <Badge className="bg-red-100 text-red-700 text-xs">No Balance</Badge>
+                            )}
+                            {isLow && !isEmpty && (
+                              <Badge className="bg-amber-100 text-amber-700 text-xs">Low Balance</Badge>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
               </div>
 
               {/* Calendar and Selected Dates */}
@@ -776,6 +942,18 @@ const LeavesPage = () => {
                 </div>
               </div>
 
+              {/* Balance Check Warning */}
+              {hasInsufficientBalance() && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-red-700">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm">
+                      Insufficient balance! Available: {getSelectedTypeInfo()?.available} days, Requested: {calculateTotalDays()} days
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Reason */}
               <div>
                 <Label htmlFor="reason">Reason</Label>
@@ -798,7 +976,10 @@ const LeavesPage = () => {
                   <div className="grid grid-cols-3 gap-4 text-sm">
                     <div>
                       <p className="text-slate-500">Leave Type</p>
-                      <p className="font-medium text-slate-900">{leaveForm.leave_type}</p>
+                      <p className="font-medium text-slate-900 flex items-center gap-1">
+                        {leaveForm.leave_type === 'Comp Off' && <Gift className="w-3 h-3 text-purple-600" />}
+                        {leaveForm.leave_type}
+                      </p>
                     </div>
                     <div>
                       <p className="text-slate-500">Selected Days</p>
@@ -827,7 +1008,7 @@ const LeavesPage = () => {
                   type="submit"
                   data-testid="submit-leave-btn"
                   className="flex-1 bg-slate-800 hover:bg-slate-900"
-                  disabled={submitting || sortedSelectedDates.length === 0}
+                  disabled={submitting || sortedSelectedDates.length === 0 || hasInsufficientBalance()}
                 >
                   {submitting ? 'Submitting...' : `Submit Leave (${calculateTotalDays()} days)`}
                 </Button>
@@ -835,6 +1016,56 @@ const LeavesPage = () => {
             </form>
           </DialogContent>
         </Dialog>
+      </div>
+
+      {/* Leave Balance Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        {loadingTypes ? (
+          <div className="col-span-full text-center py-4 text-slate-500">
+            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+            Loading balances...
+          </div>
+        ) : (
+          leaveTypes.map(type => {
+            const isCompOff = type.isCompOff;
+            const isLow = type.available < 3 && type.available > 0 && !isCompOff && type.name !== 'Unpaid Leave';
+            const isEmpty = type.available === 0 && type.name !== 'Unpaid Leave';
+
+            return (
+              <Card
+                key={type.name}
+                className={`border-2 transition-all ${isEmpty && !isCompOff ? 'border-red-200 bg-red-50' :
+                  isLow ? 'border-amber-200 bg-amber-50' :
+                    getLeaveTypeColor(type.name)
+                  }`}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    {isCompOff && <Gift className="w-4 h-4 text-purple-600" />}
+                    <p className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                      {type.name}
+                    </p>
+                  </div>
+                  <p className={`text-2xl font-bold ${isEmpty && !isCompOff ? 'text-red-700' :
+                    isLow ? 'text-amber-700' :
+                      'text-slate-900'
+                    }`}>
+                    {type.name === 'Unpaid Leave' ? '∞' : type.available}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {isCompOff ? (
+                      'days available'
+                    ) : type.name === 'Unpaid Leave' ? (
+                      'unlimited'
+                    ) : (
+                      `of ${type.quota} days/year`
+                    )}
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
       </div>
 
       {/* Leaves List */}
@@ -851,11 +1082,14 @@ const LeavesPage = () => {
                 <div
                   key={leave.id}
                   data-testid={`leave-item-${leave.id}`}
-                  className="p-5 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors border border-slate-100"
+                  className={`p-5 rounded-xl hover:shadow-md transition-all border-2 ${getLeaveTypeColor(leave.leave_type)}`}
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <div className="flex items-center gap-3 mb-2">
+                        {leave.leave_type === 'Comp Off' && (
+                          <Gift className="w-4 h-4 text-purple-600" />
+                        )}
                         <h3 className="font-semibold text-slate-900">{leave.leave_type}</h3>
                         <Badge className={getStatusBadge(leave.status)}>{getStatusText(leave.status)}</Badge>
                       </div>
@@ -889,7 +1123,7 @@ const LeavesPage = () => {
                       )}
                     </div>
                   </div>
-                  <div className="bg-white p-3 rounded-lg border border-slate-200">
+                  <div className="bg-white/70 p-3 rounded-lg border border-slate-200">
                     <p className="text-sm text-slate-600">
                       <span className="font-medium text-slate-700">Reason: </span>
                       {leave.reason}

@@ -20,10 +20,9 @@ const LeaveBalancePage = () => {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [leaveTypes, setLeaveTypes] = useState([]);
-  const [compOffRecords, setCompOffRecords] = useState([]);
 
   // Calendar states
-  const [viewMode, setViewMode] = useState('cards'); // 'cards' or 'calendar'
+  const [viewMode, setViewMode] = useState('cards');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarEmployee, setCalendarEmployee] = useState('all');
   const [calendarLeaves, setCalendarLeaves] = useState([]);
@@ -76,13 +75,19 @@ const LeaveBalancePage = () => {
   const loadLeaveTypes = () => {
     const saved = localStorage.getItem('leave_types');
     if (saved) {
-      setLeaveTypes(JSON.parse(saved));
+      const parsed = JSON.parse(saved);
+      // Add Comp Off if not already present
+      if (!parsed.find(t => t.name.toLowerCase().includes('comp'))) {
+        parsed.push({ name: 'Comp Off', quota: 0 });
+      }
+      setLeaveTypes(parsed);
     } else {
       setLeaveTypes([
         { name: 'Sick Leave', quota: 12 },
         { name: 'Casual Leave', quota: 12 },
         { name: 'Paid Leave', quota: 15 },
-        { name: 'Unpaid Leave', quota: 0 }
+        { name: 'Unpaid Leave', quota: 0 },
+        { name: 'Comp Off', quota: 0 }
       ]);
     }
   };
@@ -91,13 +96,6 @@ const LeaveBalancePage = () => {
     try {
       const response = await api.get('/employees');
       setEmployees(response.data);
-
-      try {
-        const compOffResponse = await api.get('/comp-off/records');
-        setCompOffRecords(compOffResponse.data || []);
-      } catch (err) {
-        console.log('Comp-off not available');
-      }
     } catch (error) {
       console.error('Failed to fetch employees:', error);
       toast.error('Failed to load employees');
@@ -133,31 +131,23 @@ const LeaveBalancePage = () => {
       let allLeaves = [];
 
       if (calendarEmployee === 'all') {
-        // Fetch leaves for all employees
         const response = await api.get('/leaves/all');
         allLeaves = response.data || [];
       } else {
-        // Fetch leaves for specific employee - this returns events with singular 'date' field
         const response = await api.get(`/leaves/calendar/${calendarEmployee}?year=${year}&month=${month}`);
         const events = response.data.events || [];
 
-        // Transform events to have 'dates' array format for consistency
         allLeaves = events.map(event => ({
           ...event,
-          // Convert singular 'date' to 'dates' array
           dates: event.date ? [event.date] : [],
           employee_name: response.data.employee?.name || '',
           days_count: event.total_days_in_application || 1
         }));
       }
 
-      // Process leaves for calendar display
       const processedLeaves = allLeaves.map(leave => {
-        // Safely get leave type
         const leaveType = leave.leave_type || '';
         const leaveTypeKey = leave.leave_type_key || leaveType.toLowerCase().replace(/ /g, '_');
-
-        // Normalize dates array
         const normalizedDates = getNormalizedDates(leave);
 
         return {
@@ -176,14 +166,12 @@ const LeaveBalancePage = () => {
         };
       });
 
-      // Filter by month - check if any date in the dates array falls within the month
       const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
       const lastDay = new Date(year, month, 0).getDate();
       const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
       const filtered = processedLeaves.filter(leave => {
         if (!leave.dates || leave.dates.length === 0) return false;
-        // Check if any date falls within the month
         return leave.dates.some(dateStr => dateStr >= monthStart && dateStr <= monthEnd);
       });
 
@@ -204,15 +192,15 @@ const LeaveBalancePage = () => {
       setCalendarHolidays(response.data || []);
     } catch (error) {
       console.error('Failed to fetch holidays:', error);
-      // Don't show error toast - holidays are optional
     }
   };
 
-  const getEmployeeCompOff = (employeeId) => {
-    const records = compOffRecords.filter(r => r.employee_id === employeeId);
-    const total = records.reduce((sum, r) => sum + (r.days || 0), 0);
-    const used = records.reduce((sum, r) => sum + (r.used || 0), 0);
-    return total - used;
+  // ============================================
+  // KEY FIX: Get comp-off from employee.leave_balance.comp_off
+  // ============================================
+  const getEmployeeCompOff = (employee) => {
+    // Use employee.leave_balance.comp_off as the single source of truth
+    return employee.leave_balance?.comp_off ?? 0;
   };
 
   const filterEmployees = () => {
@@ -308,7 +296,6 @@ const LeaveBalancePage = () => {
 
     return calendarLeaves.filter(leave => {
       if (!leave.dates || !Array.isArray(leave.dates)) return false;
-      // Check if this date exists in the leave's dates array
       return leave.dates.includes(dateStr);
     });
   };
@@ -316,7 +303,6 @@ const LeaveBalancePage = () => {
   const getHolidayForDate = (date) => {
     const dateStr = formatLocalDate(date);
     return calendarHolidays.find(h => {
-      // Handle both string dates and ISO dates
       const holidayDate = h.date ? normalizeToDateString(h.date) : '';
       return holidayDate === dateStr;
     });
@@ -333,7 +319,6 @@ const LeaveBalancePage = () => {
     return <Badge variant="outline" className={config.className}>{config.label}</Badge>;
   };
 
-  // Helper to format dates array for display
   const formatLeaveDates = (dates) => {
     if (!dates || dates.length === 0) return 'No dates';
 
@@ -349,7 +334,6 @@ const LeaveBalancePage = () => {
       return `${format(sortedDates[0], 'MMM dd')} & ${format(sortedDates[1], 'MMM dd, yyyy')}`;
     }
 
-    // For 3+ dates, show first and last
     return `${format(sortedDates[0], 'MMM dd')} - ${format(sortedDates[sortedDates.length - 1], 'MMM dd, yyyy')}`;
   };
 
@@ -394,7 +378,6 @@ const LeaveBalancePage = () => {
             )}
           </div>
 
-          {/* Holiday Display */}
           {holiday && (
             <div
               onClick={() => {
@@ -413,7 +396,6 @@ const LeaveBalancePage = () => {
             </div>
           )}
 
-          {/* Leaves Display */}
           <div className="space-y-0.5 overflow-y-auto max-h-12 md:max-h-14">
             {dateLeaves.slice(0, holiday ? 2 : 3).map((leave, idx) => (
               <div
@@ -518,7 +500,6 @@ const LeaveBalancePage = () => {
       {/* Calendar View */}
       {viewMode === 'calendar' && (
         <div className="space-y-4">
-          {/* Calendar Controls */}
           <Card className="border-slate-100 shadow-sm">
             <CardHeader className="border-b border-slate-100 bg-slate-50 py-3">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -538,7 +519,6 @@ const LeaveBalancePage = () => {
                   </Button>
                 </div>
 
-                {/* Employee Filter */}
                 <div className="flex items-center gap-3">
                   <Users className="w-5 h-5 text-slate-500" />
                   <Select value={calendarEmployee} onValueChange={setCalendarEmployee}>
@@ -564,7 +544,6 @@ const LeaveBalancePage = () => {
                 </div>
               ) : (
                 <>
-                  {/* Day Headers */}
                   <div className="grid grid-cols-7 border-b border-slate-200">
                     {dayNames.map(day => (
                       <div
@@ -577,7 +556,6 @@ const LeaveBalancePage = () => {
                     ))}
                   </div>
 
-                  {/* Calendar Grid */}
                   <div className="grid grid-cols-7">
                     {renderCalendar()}
                   </div>
@@ -614,7 +592,6 @@ const LeaveBalancePage = () => {
                 </div>
               </div>
 
-              {/* Holiday Legend */}
               <div className="flex flex-wrap items-center gap-4 mt-3 pt-3 border-t border-slate-200">
                 <span className="text-sm font-medium text-slate-600">Holidays:</span>
                 <div className="flex items-center gap-2">
@@ -643,119 +620,127 @@ const LeaveBalancePage = () => {
       {viewMode === 'cards' && (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {filteredEmployees.map((employee) => (
-              <Card key={employee.id} className="border-slate-100 shadow-sm">
-                <CardHeader className="bg-slate-50 border-b border-slate-100">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center">
-                        <Users className="w-6 h-6 text-slate-600" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-lg font-semibold text-slate-900">
-                          {employee.full_name}
-                        </CardTitle>
-                        <p className="text-sm text-slate-500">{employee.email}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="outline" className="text-xs">
-                            {employee.department}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs capitalize">
-                            {employee.role}
-                          </Badge>
+            {filteredEmployees.map((employee) => {
+              // Get comp-off balance directly from employee
+              const compOffBalance = getEmployeeCompOff(employee);
+
+              return (
+                <Card key={employee.id} className="border-slate-100 shadow-sm">
+                  <CardHeader className="bg-slate-50 border-b border-slate-100">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
+                          {employee.profile_picture_url ? (
+                            <img
+                              src={employee.profile_picture_url}
+                              alt={employee.full_name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <Users className="w-6 h-6 text-slate-600" />
+                          )}
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg font-semibold text-slate-900">
+                            {employee.full_name}
+                          </CardTitle>
+                          <p className="text-sm text-slate-500">{employee.email}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="outline" className="text-xs">
+                              {employee.department}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs capitalize">
+                              {employee.role}
+                            </Badge>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setCalendarEmployee(employee.employee_id);
-                          setViewMode('calendar');
-                        }}
-                        className="rounded-full"
-                      >
-                        <Calendar className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => handleAdjustBalance(employee)}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full"
-                      >
-                        <Gift className="w-4 h-4 mr-1" />
-                        Adjust
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    {leaveTypes.map((leaveType) => {
-                      const key = leaveType.name?.toLowerCase()?.replace(/ /g, '_');
-                      const balance = employee.leave_balance?.[key] ?? 0;
-                      const isLow = balance < 3 && balance > 0;
-                      const isEmpty = balance === 0;
-
-                      return (
-                        <div
-                          key={key}
-                          className={`p-4 rounded-lg border-2 transition-all ${isEmpty
-                            ? 'bg-red-50 border-red-200'
-                            : isLow
-                              ? 'bg-amber-50 border-amber-200'
-                              : 'bg-slate-50 border-slate-200'
-                            }`}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setCalendarEmployee(employee.employee_id);
+                            setViewMode('calendar');
+                          }}
+                          className="rounded-full"
                         >
-                          <p className="text-xs font-medium text-slate-600 uppercase tracking-wider mb-1">
-                            {leaveType.name}
-                          </p>
-                          <p
-                            className={`text-2xl font-bold ${isEmpty
-                              ? 'text-red-700'
+                          <Calendar className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleAdjustBalance(employee)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full"
+                        >
+                          <Gift className="w-4 h-4 mr-1" />
+                          Adjust
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      {leaveTypes.filter(lt => !lt.name.toLowerCase().includes('comp')).map((leaveType) => {
+                        const key = leaveType.name?.toLowerCase()?.replace(/ /g, '_');
+                        const balance = employee.leave_balance?.[key] ?? 0;
+                        const isLow = balance < 3 && balance > 0;
+                        const isEmpty = balance === 0;
+
+                        return (
+                          <div
+                            key={key}
+                            className={`p-4 rounded-lg border-2 transition-all ${isEmpty
+                              ? 'bg-red-50 border-red-200'
                               : isLow
-                                ? 'text-amber-700'
-                                : 'text-slate-900'
+                                ? 'bg-amber-50 border-amber-200'
+                                : 'bg-slate-50 border-slate-200'
                               }`}
                           >
-                            {balance}
-                          </p>
-                          <p className="text-xs text-slate-500 mt-1">
-                            {leaveType.quota > 0 ? `of ${leaveType.quota} days` : 'Unlimited'}
-                          </p>
-                        </div>
-                      );
-                    })}
-
-                    {/* Comp-Off Balance */}
-                    {(() => {
-                      const compOffBalance = getEmployeeCompOff(employee.employee_id);
-                      return (
-                        <div className="p-4 rounded-lg border-2 bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-300 transition-all">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Gift className="w-4 h-4 text-emerald-600" />
-                            <p className="text-xs font-medium text-emerald-700 uppercase tracking-wider">
-                              Comp-Off
+                            <p className="text-xs font-medium text-slate-600 uppercase tracking-wider mb-1">
+                              {leaveType.name}
+                            </p>
+                            <p
+                              className={`text-2xl font-bold ${isEmpty
+                                ? 'text-red-700'
+                                : isLow
+                                  ? 'text-amber-700'
+                                  : 'text-slate-900'
+                                }`}
+                            >
+                              {balance}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {leaveType.quota > 0 ? `of ${leaveType.quota} days` : 'Unlimited'}
                             </p>
                           </div>
-                          <p className="text-2xl font-bold text-emerald-700">{compOffBalance}</p>
-                          <p className="text-xs text-emerald-600 mt-1">Extra earned days</p>
-                        </div>
-                      );
-                    })()}
-                  </div>
+                        );
+                      })}
 
-                  <div className="mt-4 pt-4 border-t border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-600">Total Balance:</span>
-                      <span className="text-xl font-bold text-slate-900">
-                        {getTotalLeaves(employee.leave_balance) + getEmployeeCompOff(employee.employee_id)} days
-                      </span>
+                      {/* Comp-Off Balance - Uses employee.leave_balance.comp_off */}
+                      <div className="p-4 rounded-lg border-2 bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-300 transition-all">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Gift className="w-4 h-4 text-emerald-600" />
+                          <p className="text-xs font-medium text-emerald-700 uppercase tracking-wider">
+                            Comp-Off
+                          </p>
+                        </div>
+                        <p className="text-2xl font-bold text-emerald-700">{compOffBalance}</p>
+                        <p className="text-xs text-emerald-600 mt-1">Extra earned days</p>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+
+                    <div className="mt-4 pt-4 border-t border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-600">Total Balance:</span>
+                        <span className="text-xl font-bold text-slate-900">
+                          {getTotalLeaves(employee.leave_balance)} days
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
 
           {filteredEmployees.length === 0 && (
@@ -903,7 +888,6 @@ const LeaveBalancePage = () => {
           </DialogHeader>
           {selectedLeave && (
             <div className="space-y-4 mt-4">
-              {/* Leave Type Badge */}
               <div
                 className="p-4 rounded-lg border-2"
                 style={{
@@ -924,7 +908,6 @@ const LeaveBalancePage = () => {
                 </div>
               </div>
 
-              {/* Details */}
               <div className="space-y-3">
                 <div className="flex items-start gap-3">
                   <Calendar className="w-4 h-4 text-slate-400 mt-0.5" />
@@ -933,7 +916,6 @@ const LeaveBalancePage = () => {
                     <p className="font-medium text-slate-900 mb-2">
                       {formatLeaveDates(selectedLeave.dates)}
                     </p>
-                    {/* Show individual dates */}
                     {selectedLeave.dates && selectedLeave.dates.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {selectedLeave.dates
@@ -998,7 +980,6 @@ const LeaveBalancePage = () => {
           </DialogHeader>
           {selectedHoliday && (
             <div className="space-y-4 mt-4">
-              {/* Holiday Card */}
               <div
                 className="p-4 rounded-lg border-2"
                 style={{

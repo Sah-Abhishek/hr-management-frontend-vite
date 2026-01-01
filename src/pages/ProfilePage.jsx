@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Mail, Phone, Briefcase, Calendar, Edit2, Save, X, Camera, Upload, FileText, Trash2, Eye, Shield, CheckCircle } from 'lucide-react';
+import { User, Mail, Phone, Briefcase, Calendar, Edit2, Save, X, Camera, Upload, FileText, Trash2, Eye, Shield, CheckCircle, Clock, Gift, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import api from '@/lib/api';
-import { format } from 'date-fns';
+import { format, parseISO, differenceInDays } from 'date-fns';
 
 const ProfilePage = () => {
   const [employee, setEmployee] = useState(null);
@@ -21,6 +21,8 @@ const ProfilePage = () => {
   const [govIdDialogOpen, setGovIdDialogOpen] = useState(false);
   const [viewGovIdDialogOpen, setViewGovIdDialogOpen] = useState(false);
   const [selectedIdType, setSelectedIdType] = useState('Aadhaar Card');
+  const [compOffData, setCompOffData] = useState({ total_balance: 0, comp_offs: [] });
+  const [compOffDialogOpen, setCompOffDialogOpen] = useState(false);
 
   const profilePicInputRef = useRef(null);
   const govIdInputRef = useRef(null);
@@ -43,6 +45,7 @@ const ProfilePage = () => {
 
   useEffect(() => {
     fetchProfile();
+    fetchCompOffBalance();
   }, []);
 
   const fetchProfile = async () => {
@@ -60,6 +63,15 @@ const ProfilePage = () => {
       toast.error('Failed to load profile');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCompOffBalance = async () => {
+    try {
+      const response = await api.get('/comp-off/balance');
+      setCompOffData(response.data);
+    } catch (error) {
+      console.error('Failed to fetch comp-off balance:', error);
     }
   };
 
@@ -93,14 +105,12 @@ const ProfilePage = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
     if (!validTypes.includes(file.type)) {
       toast.error('Invalid file type. Please upload JPEG, PNG, GIF, or WebP');
       return;
     }
 
-    // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast.error('File too large. Maximum size is 5MB');
       return;
@@ -122,7 +132,6 @@ const ProfilePage = () => {
       toast.error(error.response?.data?.detail || 'Failed to upload profile picture');
     } finally {
       setUploadingPfp(false);
-      // Reset input
       if (profilePicInputRef.current) {
         profilePicInputRef.current.value = '';
       }
@@ -145,14 +154,12 @@ const ProfilePage = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
     if (!validTypes.includes(file.type)) {
       toast.error('Invalid file type. Please upload JPEG, PNG, GIF, WebP, or PDF');
       return;
     }
 
-    // Validate file size (10MB)
     if (file.size > 10 * 1024 * 1024) {
       toast.error('File too large. Maximum size is 10MB');
       return;
@@ -176,7 +183,6 @@ const ProfilePage = () => {
       toast.error(error.response?.data?.detail || 'Failed to upload government ID');
     } finally {
       setUploadingGovId(false);
-      // Reset input
       if (govIdInputRef.current) {
         govIdInputRef.current.value = '';
       }
@@ -201,6 +207,41 @@ const ProfilePage = () => {
     return imageExtensions.some(ext => url.toLowerCase().includes(ext));
   };
 
+  const formatDate = (dateStr) => {
+    try {
+      return format(parseISO(dateStr), 'MMM dd, yyyy');
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatShortDate = (dateStr) => {
+    try {
+      return format(parseISO(dateStr), 'MMM dd');
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const getDaysUntilExpiry = (expiryDateStr) => {
+    if (!expiryDateStr) return null;
+    try {
+      const expiryDate = parseISO(expiryDateStr);
+      const today = new Date();
+      return differenceInDays(expiryDate, today);
+    } catch {
+      return null;
+    }
+  };
+
+  const getExpiryStatus = (daysLeft) => {
+    if (daysLeft === null) return { color: 'slate', text: 'No expiry' };
+    if (daysLeft <= 0) return { color: 'red', text: 'Expired' };
+    if (daysLeft <= 7) return { color: 'red', text: `${daysLeft}d left` };
+    if (daysLeft <= 30) return { color: 'amber', text: `${daysLeft}d left` };
+    return { color: 'emerald', text: `${daysLeft}d left` };
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -216,6 +257,8 @@ const ProfilePage = () => {
       </div>
     );
   }
+
+  const compOffBalance = employee.leave_balance?.comp_off ?? compOffData.total_balance ?? 0;
 
   return (
     <div className="p-6 md:p-10 space-y-6">
@@ -334,7 +377,6 @@ const ProfilePage = () => {
                         <User className="w-12 h-12 text-slate-600" />
                       )}
                     </div>
-                    {/* Upload overlay */}
                     <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <label className="cursor-pointer p-2">
                         <Camera className="w-6 h-6 text-white" />
@@ -469,7 +511,6 @@ const ProfilePage = () => {
             <CardContent>
               {employee.government_id_url ? (
                 <div className="space-y-4">
-                  {/* ID Preview */}
                   <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
                     {isImageFile(employee.government_id_url) ? (
                       <img
@@ -491,7 +532,6 @@ const ProfilePage = () => {
                     </div>
                   </div>
 
-                  {/* ID Info */}
                   <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
                     <p className="text-sm font-medium text-slate-700">{employee.government_id_type || 'Government ID'}</p>
                     {employee.government_id_uploaded_at && (
@@ -501,7 +541,6 @@ const ProfilePage = () => {
                     )}
                   </div>
 
-                  {/* Actions */}
                   <div className="flex gap-2">
                     <Dialog open={viewGovIdDialogOpen} onOpenChange={setViewGovIdDialogOpen}>
                       <DialogTrigger asChild>
@@ -569,12 +608,8 @@ const ProfilePage = () => {
                                 disabled={uploadingGovId}
                               />
                               <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                              <p className="text-sm text-slate-600 mb-1">
-                                Click to upload or drag and drop
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                JPEG, PNG, GIF, WebP or PDF (max 10MB)
-                              </p>
+                              <p className="text-sm text-slate-600 mb-1">Click to upload or drag and drop</p>
+                              <p className="text-xs text-slate-500">JPEG, PNG, GIF, WebP or PDF (max 10MB)</p>
                               <Button
                                 type="button"
                                 variant="outline"
@@ -643,12 +678,8 @@ const ProfilePage = () => {
                               disabled={uploadingGovId}
                             />
                             <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                            <p className="text-sm text-slate-600 mb-1">
-                              Click to upload or drag and drop
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              JPEG, PNG, GIF, WebP or PDF (max 10MB)
-                            </p>
+                            <p className="text-sm text-slate-600 mb-1">Click to upload or drag and drop</p>
+                            <p className="text-xs text-slate-500">JPEG, PNG, GIF, WebP or PDF (max 10MB)</p>
                             <Button
                               type="button"
                               variant="outline"
@@ -678,34 +709,215 @@ const ProfilePage = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
+                {/* Sick Leave */}
+                <div className="p-3 bg-red-50 rounded-lg border border-red-100">
+                  <p className="text-xs font-medium text-red-700 mb-1">Sick Leave</p>
+                  <p className="text-2xl font-bold text-red-900">{employee.leave_balance?.sick_leave ?? 0}</p>
+                  <p className="text-xs text-red-600">days remaining</p>
+                </div>
+
+                {/* Casual Leave */}
                 <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-                  <p className="text-xs font-medium text-blue-700 mb-1">Sick Leave</p>
-                  <p className="text-2xl font-bold text-blue-900">{employee.leave_balance?.sick_leave ?? 0}</p>
+                  <p className="text-xs font-medium text-blue-700 mb-1">Casual Leave</p>
+                  <p className="text-2xl font-bold text-blue-900">{employee.leave_balance?.casual_leave ?? 0}</p>
                   <p className="text-xs text-blue-600">days remaining</p>
                 </div>
 
+                {/* Paid Leave */}
                 <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
-                  <p className="text-xs font-medium text-emerald-700 mb-1">Casual Leave</p>
-                  <p className="text-2xl font-bold text-emerald-900">{employee.leave_balance?.casual_leave ?? 0}</p>
+                  <p className="text-xs font-medium text-emerald-700 mb-1">Paid Leave</p>
+                  <p className="text-2xl font-bold text-emerald-900">{employee.leave_balance?.paid_leave ?? 0}</p>
                   <p className="text-xs text-emerald-600">days remaining</p>
                 </div>
 
-                <div className="p-3 bg-purple-50 rounded-lg border border-purple-100">
-                  <p className="text-xs font-medium text-purple-700 mb-1">Paid Leave</p>
-                  <p className="text-2xl font-bold text-purple-900">{employee.leave_balance?.paid_leave ?? 0}</p>
-                  <p className="text-xs text-purple-600">days remaining</p>
+                {/* Unpaid Leave */}
+                <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
+                  <p className="text-xs font-medium text-amber-700 mb-1">Unpaid Leave</p>
+                  <p className="text-2xl font-bold text-amber-900">{employee.leave_balance?.unpaid_leave ?? 0}</p>
+                  <p className="text-xs text-amber-600">days taken</p>
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <p className="text-xs font-medium text-slate-700 mb-1">Unpaid Leave</p>
-                  <p className="text-2xl font-bold text-slate-900">{employee.leave_balance?.unpaid_leave ?? 0}</p>
-                  <p className="text-xs text-slate-600">days used</p>
+                {/* Comp Off - Enhanced with work dates */}
+                <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <Gift className="w-3.5 h-3.5 text-purple-600" />
+                      <p className="text-xs font-medium text-purple-700">Comp Off</p>
+                    </div>
+                    {compOffData.comp_offs.length > 0 && (
+                      <button
+                        onClick={() => setCompOffDialogOpen(true)}
+                        className="text-xs text-purple-600 hover:text-purple-800 underline"
+                      >
+                        View Details
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-end justify-between">
+                    <div>
+                      <p className="text-2xl font-bold text-purple-900">{compOffBalance}</p>
+                      <p className="text-xs text-purple-600">days available</p>
+                    </div>
+                    {compOffData.comp_offs.length > 0 && (
+                      <Badge className="bg-purple-100 text-purple-700 text-xs">
+                        {compOffData.comp_offs.length} grant{compOffData.comp_offs.length !== 1 ? 's' : ''}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Work dates preview */}
+                  {compOffData.comp_offs.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-purple-200 space-y-1.5">
+                      <p className="text-xs font-medium text-purple-700">Work Dates:</p>
+                      {compOffData.comp_offs.slice(0, 3).map((compOff, idx) => {
+                        const daysLeft = getDaysUntilExpiry(compOff.expiry_date);
+                        const expiryStatus = getExpiryStatus(daysLeft);
+
+                        return (
+                          <div
+                            key={compOff.id || idx}
+                            className="flex items-center justify-between bg-purple-100/50 px-2 py-1.5 rounded text-xs"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <Calendar className="w-3 h-3 text-purple-500" />
+                              <span className="text-purple-800 font-medium">
+                                {formatShortDate(compOff.work_date)}
+                              </span>
+                              <span className="text-purple-600">
+                                ({compOff.remaining_days ?? compOff.days}d)
+                              </span>
+                            </div>
+                            {daysLeft !== null && daysLeft <= 30 && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium
+                                ${expiryStatus.color === 'red' ? 'bg-red-100 text-red-700' : ''}
+                                ${expiryStatus.color === 'amber' ? 'bg-amber-100 text-amber-700' : ''}
+                                ${expiryStatus.color === 'emerald' ? 'bg-emerald-100 text-emerald-700' : ''}
+                              `}>
+                                {expiryStatus.text}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {compOffData.comp_offs.length > 3 && (
+                        <button
+                          onClick={() => setCompOffDialogOpen(true)}
+                          className="w-full text-xs text-purple-600 hover:text-purple-800 py-1 text-center"
+                        >
+                          +{compOffData.comp_offs.length - 3} more...
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {compOffData.comp_offs.length === 0 && compOffBalance === 0 && (
+                    <p className="text-xs text-purple-500 mt-2 italic">No comp-off available</p>
+                  )}
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {/* Comp-Off Details Dialog */}
+      <Dialog open={compOffDialogOpen} onOpenChange={setCompOffDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Gift className="w-5 h-5 text-purple-600" />
+              Comp-Off Details
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            {/* Summary */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="p-3 bg-purple-50 rounded-lg text-center border border-purple-200">
+                <p className="text-2xl font-bold text-purple-800">{compOffBalance}</p>
+                <p className="text-xs text-purple-600">Available</p>
+              </div>
+              <div className="p-3 bg-blue-50 rounded-lg text-center border border-blue-200">
+                <p className="text-2xl font-bold text-blue-800">
+                  {compOffData.comp_offs.reduce((sum, c) => sum + (c.days || 0), 0)}
+                </p>
+                <p className="text-xs text-blue-600">Total Granted</p>
+              </div>
+              <div className="p-3 bg-amber-50 rounded-lg text-center border border-amber-200">
+                <p className="text-2xl font-bold text-amber-800">
+                  {compOffData.comp_offs.reduce((sum, c) => sum + ((c.days || 0) - (c.remaining_days || c.days || 0)), 0)}
+                </p>
+                <p className="text-xs text-amber-600">Used</p>
+              </div>
+            </div>
+
+            {/* List of comp-offs */}
+            <div className="space-y-3 max-h-[350px] overflow-y-auto">
+              {compOffData.comp_offs.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">
+                  <Gift className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                  <p>No comp-off records</p>
+                </div>
+              ) : (
+                compOffData.comp_offs.map((compOff, idx) => {
+                  const daysLeft = getDaysUntilExpiry(compOff.expiry_date);
+                  const expiryStatus = getExpiryStatus(daysLeft);
+                  const isExpired = daysLeft !== null && daysLeft <= 0;
+
+                  return (
+                    <div
+                      key={compOff.id || idx}
+                      className={`p-3 rounded-lg border ${isExpired ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-purple-50 border-purple-200'}`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4 text-purple-600" />
+                            <span className="font-semibold text-purple-900">
+                              {formatDate(compOff.work_date)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-purple-600 mt-1 ml-6">
+                            {compOff.reason}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-purple-800">
+                            {compOff.remaining_days ?? compOff.days}
+                            <span className="text-sm font-normal text-purple-600">/{compOff.days}d</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-purple-200/50">
+                        <div className="flex items-center gap-1.5 text-xs text-purple-600">
+                          <Clock className="w-3 h-3" />
+                          <span>Expires: {compOff.expiry_date ? formatDate(compOff.expiry_date) : 'N/A'}</span>
+                        </div>
+                        <span className={`text-xs px-2 py-0.5 rounded font-medium
+                          ${expiryStatus.color === 'red' ? 'bg-red-100 text-red-700' : ''}
+                          ${expiryStatus.color === 'amber' ? 'bg-amber-100 text-amber-700' : ''}
+                          ${expiryStatus.color === 'emerald' ? 'bg-emerald-100 text-emerald-700' : ''}
+                          ${expiryStatus.color === 'slate' ? 'bg-slate-100 text-slate-600' : ''}
+                        `}>
+                          {expiryStatus.text}
+                        </span>
+                      </div>
+
+                      {isExpired && (
+                        <div className="flex items-center gap-1 mt-2 text-xs text-red-600">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>This comp-off has expired</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
