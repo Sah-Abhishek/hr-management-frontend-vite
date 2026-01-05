@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Gift, Search, Users, Calendar, ChevronLeft, ChevronRight, LayoutGrid, Clock, FileText, X, PartyPopper } from 'lucide-react';
+import { Plus, Minus, Gift, Search, Users, Calendar, ChevronLeft, ChevronRight, LayoutGrid, Clock, FileText, PartyPopper, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -16,10 +16,12 @@ const LeaveBalancePage = () => {
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [leaveTypes, setLeaveTypes] = useState([]);
+  const [leaveTypesError, setLeaveTypesError] = useState(null);
 
   // Calendar states
   const [viewMode, setViewMode] = useState('cards');
@@ -45,8 +47,10 @@ const LeaveBalancePage = () => {
     sick_leave: { bg: '#fee2e2', border: '#ef4444', text: '#991b1b' },
     casual_leave: { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af' },
     paid_leave: { bg: '#dcfce7', border: '#22c55e', text: '#166534' },
+    earned_leave: { bg: '#dcfce7', border: '#22c55e', text: '#166534' },
     unpaid_leave: { bg: '#fef3c7', border: '#f59e0b', text: '#92400e' },
-    comp_off: { bg: '#e9d5ff', border: '#a855f7', text: '#6b21a8' }
+    comp_off: { bg: '#e9d5ff', border: '#a855f7', text: '#6b21a8' },
+    comp_off_leave: { bg: '#e9d5ff', border: '#a855f7', text: '#6b21a8' }
   };
 
   // Holiday color legend
@@ -72,32 +76,40 @@ const LeaveBalancePage = () => {
     }
   }, [viewMode, currentDate, calendarEmployee]);
 
-  const loadLeaveTypes = () => {
-    const saved = localStorage.getItem('leave_types');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      // Add Comp Off if not already present
-      if (!parsed.find(t => t.name.toLowerCase().includes('comp'))) {
-        parsed.push({ name: 'Comp Off', quota: 0 });
+  const loadLeaveTypes = async () => {
+    try {
+      setLeaveTypesError(null);
+      const response = await api.get('/leaves/leave-policy');
+      const policy = response.data;
+
+      if (policy && policy.policies && policy.policies.length > 0) {
+        const types = policy.policies.map(p => ({
+          name: p.leave_type,
+          quota: p.annual_quota,
+          order: p.order || 0
+        }));
+
+        types.sort((a, b) => a.order - b.order);
+        setLeaveTypes(types);
+      } else {
+        setLeaveTypes([]);
+        setLeaveTypesError('No leave policy configured');
       }
-      setLeaveTypes(parsed);
-    } else {
-      setLeaveTypes([
-        { name: 'Sick Leave', quota: 12 },
-        { name: 'Casual Leave', quota: 12 },
-        { name: 'Paid Leave', quota: 15 },
-        { name: 'Unpaid Leave', quota: 0 },
-        { name: 'Comp Off', quota: 0 }
-      ]);
+    } catch (error) {
+      console.error('Failed to load leave types:', error);
+      setLeaveTypes([]);
+      setLeaveTypesError('Unable to fetch leave policy');
     }
   };
 
   const fetchEmployees = async () => {
     try {
+      setError(null);
       const response = await api.get('/employees');
       setEmployees(response.data);
     } catch (error) {
       console.error('Failed to fetch employees:', error);
+      setError('Unable to fetch employees');
       toast.error('Failed to load employees');
     } finally {
       setLoading(false);
@@ -195,14 +207,6 @@ const LeaveBalancePage = () => {
     }
   };
 
-  // ============================================
-  // KEY FIX: Get comp-off from employee.leave_balance.comp_off
-  // ============================================
-  const getEmployeeCompOff = (employee) => {
-    // Use employee.leave_balance.comp_off as the single source of truth
-    return employee.leave_balance?.comp_off ?? 0;
-  };
-
   const filterEmployees = () => {
     if (!searchTerm) {
       setFilteredEmployees(employees);
@@ -258,6 +262,19 @@ const LeaveBalancePage = () => {
   const getTotalLeaves = (leaveBalance = {}) => {
     if (!leaveBalance || typeof leaveBalance !== 'object') return 0;
     return Object.values(leaveBalance).reduce((sum, val) => sum + (Number(val) || 0), 0);
+  };
+
+  // Format leave type key to display name
+  const formatLeaveTypeName = (key) => {
+    return key
+      .split(/[_-]/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  // Check if leave type is comp-off
+  const isCompOffType = (key) => {
+    return key.toLowerCase().includes('comp');
   };
 
   // Calendar functions
@@ -448,6 +465,20 @@ const LeaveBalancePage = () => {
     );
   }
 
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <AlertCircle className="w-16 h-16 mx-auto mb-4 text-red-400" />
+          <p className="text-lg text-red-600 mb-2">{error}</p>
+          <Button onClick={fetchEmployees} variant="outline">
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 md:p-10 space-y-6">
       {/* Header */}
@@ -621,8 +652,8 @@ const LeaveBalancePage = () => {
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {filteredEmployees.map((employee) => {
-              // Get comp-off balance directly from employee
-              const compOffBalance = getEmployeeCompOff(employee);
+              const leaveBalance = employee.leave_balance || {};
+              const leaveEntries = Object.entries(leaveBalance);
 
               return (
                 <Card key={employee.id} className="border-slate-100 shadow-sm">
@@ -679,64 +710,79 @@ const LeaveBalancePage = () => {
                     </div>
                   </CardHeader>
                   <CardContent className="p-6">
-                    <div className="grid grid-cols-2 gap-4">
-                      {leaveTypes.filter(lt => !lt.name.toLowerCase().includes('comp')).map((leaveType) => {
-                        const key = leaveType.name?.toLowerCase()?.replace(/ /g, '_');
-                        const balance = employee.leave_balance?.[key] ?? 0;
-                        const isLow = balance < 3 && balance > 0;
-                        const isEmpty = balance === 0;
+                    {leaveEntries.length === 0 ? (
+                      <div className="text-center py-8 text-slate-500">
+                        <AlertCircle className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                        <p>No leave balance available</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-2 gap-4">
+                          {leaveEntries.map(([key, value]) => {
+                            const balance = Number(value) || 0;
+                            const isLow = balance < 3 && balance > 0;
+                            const isEmpty = balance === 0;
+                            const displayName = formatLeaveTypeName(key);
+                            const isCompOff = isCompOffType(key);
+                            const colorKey = key.toLowerCase().replace(/-/g, '_');
 
-                        return (
-                          <div
-                            key={key}
-                            className={`p-4 rounded-lg border-2 transition-all ${isEmpty
-                              ? 'bg-red-50 border-red-200'
-                              : isLow
-                                ? 'bg-amber-50 border-amber-200'
-                                : 'bg-slate-50 border-slate-200'
-                              }`}
-                          >
-                            <p className="text-xs font-medium text-slate-600 uppercase tracking-wider mb-1">
-                              {leaveType.name}
-                            </p>
-                            <p
-                              className={`text-2xl font-bold ${isEmpty
-                                ? 'text-red-700'
-                                : isLow
-                                  ? 'text-amber-700'
-                                  : 'text-slate-900'
-                                }`}
-                            >
-                              {balance}
-                            </p>
-                            <p className="text-xs text-slate-500 mt-1">
-                              {leaveType.quota > 0 ? `of ${leaveType.quota} days` : 'Unlimited'}
-                            </p>
-                          </div>
-                        );
-                      })}
+                            if (isCompOff) {
+                              return (
+                                <div
+                                  key={key}
+                                  className="p-4 rounded-lg border-2 bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-300 transition-all"
+                                >
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <Gift className="w-4 h-4 text-emerald-600" />
+                                    <p className="text-xs font-medium text-emerald-700 uppercase tracking-wider">
+                                      {displayName}
+                                    </p>
+                                  </div>
+                                  <p className="text-2xl font-bold text-emerald-700">{balance}</p>
+                                  <p className="text-xs text-emerald-600 mt-1">Extra earned days</p>
+                                </div>
+                              );
+                            }
 
-                      {/* Comp-Off Balance - Uses employee.leave_balance.comp_off */}
-                      <div className="p-4 rounded-lg border-2 bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-300 transition-all">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Gift className="w-4 h-4 text-emerald-600" />
-                          <p className="text-xs font-medium text-emerald-700 uppercase tracking-wider">
-                            Comp-Off
-                          </p>
+                            return (
+                              <div
+                                key={key}
+                                className={`p-4 rounded-lg border-2 transition-all ${isEmpty
+                                    ? 'bg-red-50 border-red-200'
+                                    : isLow
+                                      ? 'bg-amber-50 border-amber-200'
+                                      : 'bg-slate-50 border-slate-200'
+                                  }`}
+                              >
+                                <p className="text-xs font-medium text-slate-600 uppercase tracking-wider mb-1">
+                                  {displayName}
+                                </p>
+                                <p
+                                  className={`text-2xl font-bold ${isEmpty
+                                      ? 'text-red-700'
+                                      : isLow
+                                        ? 'text-amber-700'
+                                        : 'text-slate-900'
+                                    }`}
+                                >
+                                  {balance}
+                                </p>
+                                <p className="text-xs text-slate-500 mt-1">days available</p>
+                              </div>
+                            );
+                          })}
                         </div>
-                        <p className="text-2xl font-bold text-emerald-700">{compOffBalance}</p>
-                        <p className="text-xs text-emerald-600 mt-1">Extra earned days</p>
-                      </div>
-                    </div>
 
-                    <div className="mt-4 pt-4 border-t border-slate-200">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-slate-600">Total Balance:</span>
-                        <span className="text-xl font-bold text-slate-900">
-                          {getTotalLeaves(employee.leave_balance)} days
-                        </span>
-                      </div>
-                    </div>
+                        <div className="mt-4 pt-4 border-t border-slate-200">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-slate-600">Total Balance:</span>
+                            <span className="text-xl font-bold text-slate-900">
+                              {getTotalLeaves(employee.leave_balance)} days
+                            </span>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               );
@@ -783,7 +829,7 @@ const LeaveBalancePage = () => {
                     <SelectItem value="add">
                       <div className="flex items-center gap-2">
                         <Plus className="w-4 h-4 text-green-600" />
-                        Add Leaves (Comp-Off)
+                        Add Leaves
                       </div>
                     </SelectItem>
                     <SelectItem value="deduct">
@@ -798,21 +844,31 @@ const LeaveBalancePage = () => {
 
               <div>
                 <Label>Leave Type</Label>
-                <Select
-                  value={adjustForm.leave_type}
-                  onValueChange={(value) => setAdjustForm({ ...adjustForm, leave_type: value })}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select leave type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {leaveTypes.map((type) => (
-                      <SelectItem key={type.name} value={type.name}>
-                        {type.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {leaveTypesError ? (
+                  <div className="mt-1 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+                    {leaveTypesError}
+                  </div>
+                ) : leaveTypes.length === 0 ? (
+                  <div className="mt-1 p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-500">
+                    No leave types available
+                  </div>
+                ) : (
+                  <Select
+                    value={adjustForm.leave_type}
+                    onValueChange={(value) => setAdjustForm({ ...adjustForm, leave_type: value })}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select leave type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {leaveTypes.map((type) => (
+                        <SelectItem key={type.name} value={type.name}>
+                          {type.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div>
@@ -844,11 +900,11 @@ const LeaveBalancePage = () => {
                 <p className="text-sm text-blue-800">
                   {adjustForm.adjustment_type === 'add' ? (
                     <>
-                      <strong>Comp-Off:</strong> Adding compensatory leaves for extra work done.
+                      <strong>Add:</strong> Adding leaves to the balance.
                     </>
                   ) : (
                     <>
-                      <strong>Deduction:</strong> Removing leaves from balance (e.g., correction).
+                      <strong>Deduction:</strong> Removing leaves from balance.
                     </>
                   )}
                 </p>
@@ -864,9 +920,10 @@ const LeaveBalancePage = () => {
                 </Button>
                 <Button
                   onClick={handleSubmitAdjustment}
+                  disabled={leaveTypes.length === 0 || leaveTypesError}
                   className={`flex-1 ${adjustForm.adjustment_type === 'add'
-                    ? 'bg-emerald-600 hover:bg-emerald-700'
-                    : 'bg-slate-800 hover:bg-slate-900'
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : 'bg-slate-800 hover:bg-slate-900'
                     }`}
                 >
                   {adjustForm.adjustment_type === 'add' ? 'Add Leaves' : 'Deduct Leaves'}

@@ -254,19 +254,18 @@ const CompOffPage = () => {
         </p>
       </div>
 
-      {/* Info Banner */}
-      <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <Gift className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" />
-          <div className="flex-1">
-            <p className="font-medium text-purple-900 mb-1">What is Comp-Off?</p>
-            <p className="text-sm text-purple-700">
-              Compensatory off is granted to employees who work on holidays, weekends, or put in extra hours beyond normal working time.
-              Comp-off must be used within 90 days from the work date.
-            </p>
-          </div>
-        </div>
-      </div>
+      {/* <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4"> */}
+      {/*   <div className="flex items-start gap-3"> */}
+      {/*     <Gift className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" /> */}
+      {/*     <div className="flex-1"> */}
+      {/*       <p className="font-medium text-purple-900 mb-1">What is Comp-Off?</p> */}
+      {/*       <p className="text-sm text-purple-700"> */}
+      {/*         Compensatory off is granted to employees who work on holidays, weekends, or put in extra hours beyond normal working time. */}
+      {/*         Comp-off must be used within 90 days from the work date. */}
+      {/*       </p> */}
+      {/*     </div> */}
+      {/*   </div> */}
+      {/* </div> */}
 
       {/* Search */}
       <div className="bg-white p-4 rounded-lg border border-slate-200">
@@ -325,11 +324,11 @@ const CompOffPage = () => {
               </CardHeader>
               <CardContent className="pt-4">
                 {/* Balance Summary - Uses employee.leave_balance.comp_off */}
-                <div className="grid grid-cols-3 gap-2 mb-4">
-                  <div className="p-3 bg-blue-50 rounded-lg text-center border border-blue-200">
-                    <p className="text-xs text-blue-600 font-medium uppercase">Total</p>
-                    <p className="text-xl font-bold text-blue-700">{compOff.total}</p>
-                  </div>
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  {/* <div className="p-3 bg-blue-50 rounded-lg text-center border border-blue-200"> */}
+                  {/*   <p className="text-xs text-blue-600 font-medium uppercase">Total</p> */}
+                  {/*   <p className="text-xl font-bold text-blue-700">{compOff.total}</p> */}
+                  {/* </div> */}
                   <div className="p-3 bg-amber-50 rounded-lg text-center border border-amber-200">
                     <p className="text-xs text-amber-600 font-medium uppercase">Used</p>
                     <p className="text-xl font-bold text-amber-700">{compOff.used}</p>
@@ -366,8 +365,8 @@ const CompOffPage = () => {
                           <div
                             key={record.id}
                             className={`flex items-center justify-between p-2 rounded-lg border ${isExpired
-                                ? 'bg-slate-50 border-slate-200 opacity-60'
-                                : 'bg-purple-50 border-purple-200'
+                              ? 'bg-slate-50 border-slate-200 opacity-60'
+                              : 'bg-purple-50 border-purple-200'
                               }`}
                           >
                             <div className="flex items-center gap-2">
@@ -400,8 +399,8 @@ const CompOffPage = () => {
                         <div
                           key={record.id}
                           className={`p-2 rounded-lg border ${record.status === 'pending'
-                              ? 'bg-amber-50 border-amber-200'
-                              : 'bg-red-50 border-red-200'
+                            ? 'bg-amber-50 border-amber-200'
+                            : 'bg-red-50 border-red-200'
                             }`}
                         >
                           <div className="flex items-center justify-between">
@@ -519,12 +518,12 @@ const CompOffPage = () => {
               </div>
 
               {/* Info */}
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <p className="text-xs text-amber-800">
-                  <strong>Note:</strong> Comp-off will expire 90 days from the work date.
-                  The days will be added to the employee's comp-off balance immediately.
-                </p>
-              </div>
+              {/* <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg"> */}
+              {/*   <p className="text-xs text-amber-800"> */}
+              {/*     <strong>Note:</strong> Comp-off will expire 90 days from the work date. */}
+              {/*     The days will be added to the employee's comp-off balance immediately. */}
+              {/*   </p> */}
+              {/* </div> */}
 
               {/* Actions */}
               <div className="flex gap-3 pt-2">
@@ -617,12 +616,12 @@ const CompOffPage = () => {
                         <div
                           key={record.id}
                           className={`p-3 rounded-lg border ${record.status === 'approved'
-                              ? isExpired
-                                ? 'bg-slate-50 border-slate-200 opacity-70'
-                                : 'bg-purple-50 border-purple-200'
-                              : record.status === 'pending'
-                                ? 'bg-amber-50 border-amber-200'
-                                : 'bg-red-50 border-red-200'
+                            ? isExpired
+                              ? 'bg-slate-50 border-slate-200 opacity-70'
+                              : 'bg-purple-50 border-purple-200'
+                            : record.status === 'pending'
+                              ? 'bg-amber-50 border-amber-200'
+                              : 'bg-red-50 border-red-200'
                             }`}
                         >
                           <div className="flex items-start justify-between mb-2">

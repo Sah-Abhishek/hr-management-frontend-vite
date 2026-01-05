@@ -722,8 +722,8 @@ const EmployeesPage = () => {
                     <p className="text-sm font-semibold text-slate-900">{employee.leave_balance?.casual_leave ?? 0}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-500">Paid</p>
-                    <p className="text-sm font-semibold text-slate-900">{employee.leave_balance?.paid_leave ?? 0}</p>
+                    <p className="text-xs text-slate-500">Earned</p>
+                    <p className="text-sm font-semibold text-slate-900">{employee.leave_balance?.earned_leave ?? 0}</p>
                   </div>
                 </div>
               </div>

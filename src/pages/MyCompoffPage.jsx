@@ -389,12 +389,12 @@ const MyCompOffPage = () => {
               </div>
 
               {/* Info */}
-              <div className="p-3 bg-violet-50 rounded-lg border border-violet-100">
-                <p className="text-xs text-violet-700">
-                  <strong>Note:</strong> Your request will be sent to your manager for approval.
-                  Once approved, you can use this comp-off within 90 days.
-                </p>
-              </div>
+              {/* <div className="p-3 bg-violet-50 rounded-lg border border-violet-100"> */}
+              {/*   <p className="text-xs text-violet-700"> */}
+              {/*     <strong>Note:</strong> Your request will be sent to your manager for approval. */}
+              {/*     Once approved, you can use this comp-off within 90 days. */}
+              {/*   </p> */}
+              {/* </div> */}
             </div>
 
             <DialogFooter>
