@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Plus, ChevronLeft, ChevronRight, Trash2, Edit2, X, CalendarDays, Repeat, Eye } from 'lucide-react';
+import { Calendar, Plus, ChevronLeft, ChevronRight, Trash2, Edit2, X, CalendarDays, Repeat, Eye, Grid3X3, CalendarRange } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -16,7 +16,9 @@ import { format } from 'date-fns';
 const HolidaysPage = () => {
   const [holidays, setHolidays] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
+  const [viewMode, setViewMode] = useState('year'); // 'month' or 'year'
   const { user } = getAuth();
   const isAdmin = user?.role === 'admin';
 
@@ -27,6 +29,7 @@ const HolidaysPage = () => {
   const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedHoliday, setSelectedHoliday] = useState(null);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth()); // For recurring holidays
 
   // Form states
   const [holidayForm, setHolidayForm] = useState({
@@ -37,19 +40,18 @@ const HolidaysPage = () => {
 
   const [recurringForm, setRecurringForm] = useState({
     name: '',
-    day_of_week: '6', // Saturday by default
+    day_of_week: '6',
     scope: 'year',
     type: 'public'
   });
 
   useEffect(() => {
     fetchHolidays();
-  }, [currentDate]);
+  }, [currentYear]);
 
   const fetchHolidays = async () => {
     try {
-      const year = currentDate.getFullYear();
-      const response = await api.get(`/holidays?year=${year}`);
+      const response = await api.get(`/holidays?year=${currentYear}`);
       setHolidays(response.data);
     } catch (error) {
       console.error('Failed to fetch holidays:', error);
@@ -57,6 +59,11 @@ const HolidaysPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Get non-recurring holidays only
+  const getNonRecurringHolidays = () => {
+    return holidays.filter(h => !h.is_recurring);
   };
 
   // Check if a date is in the past
@@ -68,36 +75,51 @@ const HolidaysPage = () => {
     return checkDate < today;
   };
 
-  // Calendar navigation
-  const goToPreviousMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-  };
-
-  const goToNextMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
-  };
-
-  const goToToday = () => {
-    setCurrentDate(new Date());
-  };
-
+  // Year navigation
   const goToPreviousYear = () => {
-    setCurrentDate(new Date(currentDate.getFullYear() - 1, currentDate.getMonth(), 1));
+    setCurrentYear(currentYear - 1);
   };
 
   const goToNextYear = () => {
-    setCurrentDate(new Date(currentDate.getFullYear() + 1, currentDate.getMonth(), 1));
+    setCurrentYear(currentYear + 1);
+  };
+
+  const goToCurrentYear = () => {
+    setCurrentYear(new Date().getFullYear());
+    setCurrentMonth(new Date().getMonth());
+  };
+
+  // Month navigation
+  const goToPreviousMonth = () => {
+    if (currentMonth === 0) {
+      setCurrentMonth(11);
+      setCurrentYear(currentYear - 1);
+    } else {
+      setCurrentMonth(currentMonth - 1);
+    }
+  };
+
+  const goToNextMonth = () => {
+    if (currentMonth === 11) {
+      setCurrentMonth(0);
+      setCurrentYear(currentYear + 1);
+    } else {
+      setCurrentMonth(currentMonth + 1);
+    }
+  };
+
+  const goToToday = () => {
+    setCurrentYear(new Date().getFullYear());
+    setCurrentMonth(new Date().getMonth());
   };
 
   // Calendar helpers
-  const getDaysInMonth = (date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
+  const getDaysInMonth = (year, month) => {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
     const startingDay = firstDay.getDay();
-    return { daysInMonth, startingDay, year, month };
+    return { daysInMonth, startingDay };
   };
 
   const formatDateKey = (year, month, day) => {
@@ -121,25 +143,19 @@ const HolidaysPage = () => {
       });
 
       if (isPast) {
-        // Past holidays - view only (for everyone)
         setViewDialogOpen(true);
       } else if (isAdmin) {
-        // Future holidays - admin can edit
         setEditDialogOpen(true);
       } else {
-        // Future holidays - non-admin can only view
         setViewDialogOpen(true);
       }
     } else if (isAdmin && !isPast) {
-      // No holiday on this date, admin can add (only for future dates)
       setSelectedDate(dateKey);
       setHolidayForm({ name: '', type: 'public', description: '' });
       setAddDialogOpen(true);
     } else if (isAdmin && isPast) {
-      // Admin trying to add on past date
       toast.error('Cannot add holidays for past dates');
     }
-    // Non-admin clicking on empty date - do nothing
   };
 
   // Create holiday
@@ -149,7 +165,6 @@ const HolidaysPage = () => {
       return;
     }
 
-    // Double-check date is not in the past
     if (isDatePast(selectedDate)) {
       toast.error('Cannot add holidays for past dates');
       return;
@@ -177,7 +192,6 @@ const HolidaysPage = () => {
       return;
     }
 
-    // Double-check date is not in the past
     if (isDatePast(selectedHoliday.date)) {
       toast.error('Cannot modify holidays for past dates');
       return;
@@ -199,7 +213,6 @@ const HolidaysPage = () => {
 
   // Delete holiday
   const handleDeleteHoliday = async () => {
-    // Double-check date is not in the past
     if (isDatePast(selectedHoliday.date)) {
       toast.error('Cannot delete holidays for past dates');
       return;
@@ -224,18 +237,15 @@ const HolidaysPage = () => {
       return;
     }
 
-    // Check if the selected year/month is in the past
     const today = new Date();
-    const selectedYear = currentDate.getFullYear();
-    const selectedMonth = currentDate.getMonth() + 1;
 
-    if (recurringForm.scope === 'year' && selectedYear < today.getFullYear()) {
+    if (recurringForm.scope === 'year' && currentYear < today.getFullYear()) {
       toast.error('Cannot add recurring holidays for past years');
       return;
     }
 
     if (recurringForm.scope === 'month') {
-      const selectedDate = new Date(selectedYear, selectedMonth - 1, 1);
+      const selectedDate = new Date(currentYear, selectedMonth, 1);
       const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
       if (selectedDate < currentMonth) {
         toast.error('Cannot add recurring holidays for past months');
@@ -248,12 +258,12 @@ const HolidaysPage = () => {
         name: recurringForm.name,
         day_of_week: parseInt(recurringForm.day_of_week, 10),
         scope: recurringForm.scope,
-        year: currentDate.getFullYear(),
+        year: currentYear,
         type: recurringForm.type
       };
 
       if (recurringForm.scope === 'month') {
-        payload.month = currentDate.getMonth() + 1;
+        payload.month = selectedMonth + 1;
       }
 
       const response = await api.post('/holidays/recurring', payload);
@@ -274,11 +284,11 @@ const HolidaysPage = () => {
       const payload = {
         day_of_week: parseInt(recurringForm.day_of_week, 10),
         scope: recurringForm.scope,
-        year: currentDate.getFullYear()
+        year: currentYear
       };
 
       if (recurringForm.scope === 'month') {
-        payload.month = currentDate.getMonth() + 1;
+        payload.month = selectedMonth + 1;
       }
 
       const response = await api.delete('/holidays/recurring', { data: payload });
@@ -295,7 +305,16 @@ const HolidaysPage = () => {
     return days[dayIndex];
   };
 
-  const getTypeColor = (type) => {
+  const getTypeColor = (type, isRecurring = false) => {
+    if (isRecurring) {
+      return {
+        bg: 'bg-slate-100',
+        border: 'border-slate-300',
+        text: 'text-slate-500',
+        dot: 'bg-slate-400'
+      };
+    }
+
     const colors = {
       public: { bg: 'bg-red-100', border: 'border-red-400', text: 'text-red-700', dot: 'bg-red-500' },
       optional: { bg: 'bg-amber-100', border: 'border-amber-400', text: 'text-amber-700', dot: 'bg-amber-500' },
@@ -304,14 +323,98 @@ const HolidaysPage = () => {
     return colors[type] || colors.public;
   };
 
-  // Render calendar
-  const renderCalendar = () => {
-    const { daysInMonth, startingDay, year, month } = getDaysInMonth(currentDate);
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+  // Render a single month calendar
+  const renderMonthCalendar = (monthIndex) => {
+    const { daysInMonth, startingDay } = getDaysInMonth(currentYear, monthIndex);
     const days = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    // Empty cells before first day
+    for (let i = 0; i < startingDay; i++) {
+      days.push(
+        <div key={`empty-${monthIndex}-${i}`} className="h-7 w-7"></div>
+      );
+    }
+
+    // Days of month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateKey = formatDateKey(currentYear, monthIndex, day);
+      const date = new Date(currentYear, monthIndex, day);
+      const isToday = date.getTime() === today.getTime();
+      const isPast = date < today;
+      const holiday = getHolidayForDate(dateKey);
+      const isRecurring = holiday?.is_recurring;
+      const typeColor = holiday ? getTypeColor(holiday.type, isRecurring) : null;
+
+      const canClick = holiday || (isAdmin && !isPast);
+
+      days.push(
+        <div
+          key={`${monthIndex}-${day}`}
+          onClick={() => handleDateClick(dateKey, isPast)}
+          className={`
+            h-7 w-7 flex items-center justify-center text-xs rounded-md transition-all relative
+            ${isToday ? 'ring-2 ring-blue-400' : ''}
+            ${holiday ? `${typeColor.bg} ${typeColor.text} font-medium` : ''}
+            ${isPast && !holiday ? 'text-slate-300' : !holiday ? 'text-slate-700' : ''}
+            ${canClick ? 'cursor-pointer hover:bg-slate-200' : ''}
+            ${isRecurring ? 'opacity-50' : ''}
+          `}
+          title={holiday ? `${holiday.name}${isRecurring ? ' (Recurring)' : ''}` : ''}
+        >
+          {day}
+          {holiday && !isRecurring && (
+            <div className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${typeColor.dot}`}></div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="py-2 px-3 bg-slate-50 border-b">
+          <CardTitle className="text-sm font-semibold text-slate-700">
+            {monthNames[monthIndex]}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-2">
+          {/* Day headers */}
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {dayNames.map((day, idx) => (
+              <div
+                key={idx}
+                className={`h-6 w-7 flex items-center justify-center text-xs font-medium 
+                  ${idx === 0 || idx === 6 ? 'text-slate-400' : 'text-slate-600'}`}
+              >
+                {day}
+              </div>
+            ))}
+          </div>
+          {/* Calendar grid */}
+          <div className="grid grid-cols-7 gap-1">
+            {days}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // Render large month view calendar (for month view mode)
+  const renderLargeMonthCalendar = () => {
+    const { daysInMonth, startingDay } = getDaysInMonth(currentYear, currentMonth);
+    const days = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const fullDayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     // Empty cells before first day
     for (let i = 0; i < startingDay; i++) {
@@ -322,19 +425,15 @@ const HolidaysPage = () => {
 
     // Days of month
     for (let day = 1; day <= daysInMonth; day++) {
-      const dateKey = formatDateKey(year, month, day);
-      const date = new Date(year, month, day);
+      const dateKey = formatDateKey(currentYear, currentMonth, day);
+      const date = new Date(currentYear, currentMonth, day);
       const isToday = date.getTime() === today.getTime();
       const isWeekend = date.getDay() === 0 || date.getDay() === 6;
       const isPast = date < today;
       const holiday = getHolidayForDate(dateKey);
-      const typeColor = holiday ? getTypeColor(holiday.type) : null;
+      const isRecurring = holiday?.is_recurring;
+      const typeColor = holiday ? getTypeColor(holiday.type, isRecurring) : null;
 
-      // Determine cursor style
-      // - Holiday exists: clickable (to view or edit)
-      // - Admin + future date + no holiday: clickable (to add)
-      // - Admin + past date + no holiday: not-allowed
-      // - Non-admin + no holiday: default cursor
       const canClick = holiday || (isAdmin && !isPast);
       const showNotAllowed = isAdmin && isPast && !holiday;
 
@@ -350,6 +449,7 @@ const HolidaysPage = () => {
             ${isPast && !holiday ? 'bg-slate-100 opacity-60' : ''}
             ${canClick ? 'cursor-pointer hover:bg-slate-100' : ''}
             ${showNotAllowed ? 'cursor-not-allowed hover:bg-slate-100' : ''}
+            ${isRecurring ? 'opacity-50' : ''}
           `}
         >
           <div className={`text-sm font-medium ${isToday ? 'text-blue-600' : isPast ? 'text-slate-400' : isWeekend ? 'text-slate-400' : 'text-slate-700'}`}>
@@ -360,7 +460,7 @@ const HolidaysPage = () => {
               <p className={`text-xs font-medium ${typeColor.text} truncate`}>
                 {holiday.name}
               </p>
-              {holiday.is_recurring && (
+              {isRecurring && (
                 <Repeat className="w-3 h-3 text-slate-400 mt-1" />
               )}
             </div>
@@ -373,11 +473,11 @@ const HolidaysPage = () => {
       <>
         {/* Day headers */}
         <div className="grid grid-cols-7 border-b border-slate-200">
-          {dayNames.map(day => (
+          {fullDayNames.map((day, idx) => (
             <div
               key={day}
               className={`p-2 text-center text-sm font-semibold 
-                ${day === 'Sun' || day === 'Sat' ? 'text-slate-400 bg-slate-50' : 'text-slate-700 bg-white'}`}
+                ${idx === 0 || idx === 6 ? 'text-slate-400 bg-slate-50' : 'text-slate-700 bg-white'}`}
             >
               {day}
             </div>
@@ -391,19 +491,24 @@ const HolidaysPage = () => {
     );
   };
 
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-
-  // Get upcoming holidays
-  const upcomingHolidays = holidays
+  // Get upcoming holidays (non-recurring only)
+  const upcomingHolidays = getNonRecurringHolidays()
     .filter(h => {
       const today = new Date();
       const todayStr = format(today, 'yyyy-MM-dd');
       return h.date >= todayStr;
     })
     .slice(0, 5);
+
+  // Get stats (non-recurring only)
+  const nonRecurringHolidays = getNonRecurringHolidays();
+  const stats = {
+    total: nonRecurringHolidays.length,
+    public: nonRecurringHolidays.filter(h => h.type === 'public').length,
+    optional: nonRecurringHolidays.filter(h => h.type === 'optional').length,
+    restricted: nonRecurringHolidays.filter(h => h.type === 'restricted').length,
+    recurring: holidays.filter(h => h.is_recurring).length
+  };
 
   if (loading) {
     return (
@@ -426,53 +531,114 @@ const HolidaysPage = () => {
           </p>
         </div>
 
-        {isAdmin && (
-          <Button
-            onClick={() => setRecurringDialogOpen(true)}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full gap-2"
-          >
-            <Repeat className="w-4 h-4" />
-            Add Recurring Holidays
-          </Button>
-        )}
+        <div className="flex items-center gap-3">
+          {/* View Toggle */}
+          <div className="flex items-center bg-slate-100 rounded-lg p-1">
+            <Button
+              variant={viewMode === 'month' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('month')}
+              className={`gap-1 ${viewMode === 'month' ? 'bg-white shadow-sm' : ''}`}
+            >
+              <CalendarRange className="w-4 h-4" />
+              Month
+            </Button>
+            <Button
+              variant={viewMode === 'year' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('year')}
+              className={`gap-1 ${viewMode === 'year' ? 'bg-white shadow-sm' : ''}`}
+            >
+              <Grid3X3 className="w-4 h-4" />
+              Year
+            </Button>
+          </div>
+
+          {/* Navigation */}
+          {viewMode === 'year' ? (
+            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1">
+              <Button variant="ghost" size="icon" onClick={goToPreviousYear} className="h-8 w-8">
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="text-lg font-semibold text-slate-900 min-w-[60px] text-center">
+                {currentYear}
+              </span>
+              <Button variant="ghost" size="icon" onClick={goToNextYear} className="h-8 w-8">
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              <Button variant="ghost" size="sm" onClick={goToCurrentYear} className="text-xs">
+                Today
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1">
+              <Button variant="ghost" size="icon" onClick={goToPreviousMonth} className="h-8 w-8">
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="text-lg font-semibold text-slate-900 min-w-[140px] text-center">
+                {monthNames[currentMonth]} {currentYear}
+              </span>
+              <Button variant="ghost" size="icon" onClick={goToNextMonth} className="h-8 w-8">
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              <Button variant="ghost" size="sm" onClick={goToToday} className="text-xs">
+                Today
+              </Button>
+            </div>
+          )}
+
+          {isAdmin && (
+            <Button
+              onClick={() => setRecurringDialogOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full gap-2"
+            >
+              <Repeat className="w-4 h-4" />
+              Add Recurring
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Calendar */}
-        <div className="lg:col-span-3">
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+        {/* Calendar Section */}
+        <div className="xl:col-span-3">
           <Card className="border-slate-100 shadow-sm">
             <CardHeader className="border-b border-slate-100 bg-slate-50 py-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="icon" onClick={goToPreviousYear} title="Previous Year">
-                    <ChevronLeft className="w-4 h-4" />
-                    <ChevronLeft className="w-4 h-4 -ml-3" />
-                  </Button>
-                  <Button variant="outline" size="icon" onClick={goToPreviousMonth}>
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
+                  {viewMode === 'year' ? (
+                    <Grid3X3 className="w-5 h-5 text-slate-600" />
+                  ) : (
+                    <CalendarRange className="w-5 h-5 text-slate-600" />
+                  )}
+                  <h2 className="text-xl font-semibold text-slate-900">
+                    {viewMode === 'year'
+                      ? `${currentYear} Calendar`
+                      : `${monthNames[currentMonth]} ${currentYear}`
+                    }
+                  </h2>
                 </div>
-
-                <h2 className="text-xl font-semibold text-slate-900">
-                  {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-                </h2>
-
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="icon" onClick={goToNextMonth}>
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                  <Button variant="outline" size="icon" onClick={goToNextYear} title="Next Year">
-                    <ChevronRight className="w-4 h-4" />
-                    <ChevronRight className="w-4 h-4 -ml-3" />
-                  </Button>
-                  <Button variant="outline" onClick={goToToday} size="sm" className="ml-2">
-                    Today
-                  </Button>
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="text-slate-500">
+                    {stats.total} holidays • {stats.recurring} recurring (grayed)
+                  </span>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-0">
-              {renderCalendar()}
+            <CardContent className={viewMode === 'year' ? 'p-4' : 'p-0'}>
+              {viewMode === 'year' ? (
+                /* 12 Month Grid - Year View */
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {monthNames.map((_, monthIndex) => (
+                    <div key={monthIndex}>
+                      {renderMonthCalendar(monthIndex)}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                /* Large Month Calendar - Month View */
+                renderLargeMonthCalendar()
+              )}
             </CardContent>
           </Card>
 
@@ -494,12 +660,8 @@ const HolidaysPage = () => {
                   <span className="text-sm text-slate-600">Restricted Holiday</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Repeat className="w-4 h-4 text-slate-400" />
-                  <span className="text-sm text-slate-600">Recurring</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded bg-slate-200 opacity-60"></div>
-                  <span className="text-sm text-slate-600">Past Date</span>
+                  <div className="w-4 h-4 rounded bg-slate-100 border-2 border-slate-300 opacity-50"></div>
+                  <span className="text-sm text-slate-600">Recurring (Grayed)</span>
                 </div>
               </div>
               {isAdmin && (
@@ -507,33 +669,39 @@ const HolidaysPage = () => {
                   Click on any future date to add a holiday. Click on existing holidays to view or edit.
                 </p>
               )}
-              {!isAdmin && (
-                <p className="text-xs text-slate-500 mt-3">
-                  Click on any holiday to view details.
-                </p>
-              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Sidebar - Upcoming Holidays */}
-        <div className="lg:col-span-1 space-y-4">
+        {/* Sidebar */}
+        <div className="xl:col-span-1 space-y-4">
+          {/* Upcoming Holidays - Non-recurring only */}
           <Card className="border-slate-100 shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                 <CalendarDays className="w-5 h-5 text-emerald-600" />
                 Upcoming Holidays
               </CardTitle>
+              <p className="text-xs text-slate-500">Excludes recurring holidays</p>
             </CardHeader>
             <CardContent>
               {upcomingHolidays.length > 0 ? (
                 <div className="space-y-3">
                   {upcomingHolidays.map(holiday => {
-                    const typeColor = getTypeColor(holiday.type);
+                    const typeColor = getTypeColor(holiday.type, false);
                     return (
                       <div
                         key={holiday.id}
-                        className={`p-3 rounded-lg border-l-4 ${typeColor.bg} ${typeColor.border}`}
+                        className={`p-3 rounded-lg border-l-4 ${typeColor.bg} ${typeColor.border} cursor-pointer hover:shadow-sm transition-shadow`}
+                        onClick={() => {
+                          setSelectedHoliday(holiday);
+                          setHolidayForm({
+                            name: holiday.name,
+                            type: holiday.type,
+                            description: holiday.description || ''
+                          });
+                          setViewDialogOpen(true);
+                        }}
                       >
                         <p className={`font-medium ${typeColor.text}`}>{holiday.name}</p>
                         <p className="text-xs text-slate-600 mt-1">
@@ -555,38 +723,95 @@ const HolidaysPage = () => {
             </CardContent>
           </Card>
 
-          {/* Stats Card */}
+          {/* Stats Card - Non-recurring only */}
           <Card className="border-slate-100 shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg font-semibold text-slate-900">
-                {currentDate.getFullYear()} Summary
+                {currentYear} Summary
               </CardTitle>
+              <p className="text-xs text-slate-500">Excludes recurring holidays</p>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-slate-600">Total Holidays</span>
-                  <span className="font-bold text-slate-900">{holidays.length}</span>
+                  <span className="font-bold text-slate-900">{stats.total}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-slate-600">Public</span>
-                  <span className="font-medium text-red-600">
-                    {holidays.filter(h => h.type === 'public').length}
-                  </span>
+                  <span className="font-medium text-red-600">{stats.public}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-slate-600">Optional</span>
-                  <span className="font-medium text-amber-600">
-                    {holidays.filter(h => h.type === 'optional').length}
-                  </span>
+                  <span className="font-medium text-amber-600">{stats.optional}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-slate-600">Restricted</span>
-                  <span className="font-medium text-blue-600">
-                    {holidays.filter(h => h.type === 'restricted').length}
-                  </span>
+                  <span className="font-medium text-blue-600">{stats.restricted}</span>
+                </div>
+                <div className="pt-3 border-t border-slate-100">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-400">Recurring (grayed)</span>
+                    <span className="font-medium text-slate-400">{stats.recurring}</span>
+                  </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* All Holidays List for current year */}
+          <Card className="border-slate-100 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg font-semibold text-slate-900">
+                All {currentYear} Holidays
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="max-h-80 overflow-y-auto">
+              {nonRecurringHolidays.length > 0 ? (
+                <div className="space-y-2">
+                  {nonRecurringHolidays
+                    .sort((a, b) => a.date.localeCompare(b.date))
+                    .map(holiday => {
+                      const typeColor = getTypeColor(holiday.type, false);
+                      return (
+                        <div
+                          key={holiday.id}
+                          className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer"
+                          onClick={() => {
+                            setSelectedHoliday(holiday);
+                            setHolidayForm({
+                              name: holiday.name,
+                              type: holiday.type,
+                              description: holiday.description || ''
+                            });
+                            if (isDatePast(holiday.date) || !isAdmin) {
+                              setViewDialogOpen(true);
+                            } else {
+                              setEditDialogOpen(true);
+                            }
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${typeColor.dot}`}></div>
+                            <div>
+                              <p className="text-sm font-medium text-slate-800">{holiday.name}</p>
+                              <p className="text-xs text-slate-500">
+                                {format(new Date(holiday.date), 'MMM dd')}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-xs capitalize">
+                            {holiday.type}
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-slate-500">
+                  <p className="text-sm">No holidays added yet</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -659,7 +884,7 @@ const HolidaysPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Holiday Dialog (Admin Only - Future Dates) */}
+      {/* Edit Holiday Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -675,6 +900,12 @@ const HolidaysPage = () => {
                 <p className="font-semibold text-slate-900">
                   {format(new Date(selectedHoliday.date), 'EEEE, MMMM dd, yyyy')}
                 </p>
+                {selectedHoliday.is_recurring && (
+                  <Badge variant="outline" className="mt-2">
+                    <Repeat className="w-3 h-3 mr-1" />
+                    Recurring
+                  </Badge>
+                )}
               </div>
 
               <div>
@@ -733,7 +964,7 @@ const HolidaysPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* View Holiday Dialog (Read Only - For Past Holidays or Non-Admin) */}
+      {/* View Holiday Dialog */}
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -752,22 +983,24 @@ const HolidaysPage = () => {
                 </div>
               )}
 
-              <div className={`p-4 rounded-lg border-2 ${getTypeColor(selectedHoliday.type).bg} ${getTypeColor(selectedHoliday.type).border}`}>
-                <p className={`text-lg font-semibold ${getTypeColor(selectedHoliday.type).text}`}>
+              <div className={`p-4 rounded-lg border-2 ${getTypeColor(selectedHoliday.type, selectedHoliday.is_recurring).bg} ${getTypeColor(selectedHoliday.type, selectedHoliday.is_recurring).border}`}>
+                <p className={`text-lg font-semibold ${getTypeColor(selectedHoliday.type, selectedHoliday.is_recurring).text}`}>
                   {selectedHoliday.name}
                 </p>
                 <p className="text-sm text-slate-600 mt-1">
                   {format(new Date(selectedHoliday.date), 'EEEE, MMMM dd, yyyy')}
                 </p>
-                <Badge variant="outline" className="mt-2 capitalize">
-                  {selectedHoliday.type} Holiday
-                </Badge>
-                {selectedHoliday.is_recurring && (
-                  <Badge variant="outline" className="mt-2 ml-2">
-                    <Repeat className="w-3 h-3 mr-1" />
-                    Recurring
+                <div className="flex gap-2 mt-2">
+                  <Badge variant="outline" className="capitalize">
+                    {selectedHoliday.type} Holiday
                   </Badge>
-                )}
+                  {selectedHoliday.is_recurring && (
+                    <Badge variant="outline" className="text-slate-500">
+                      <Repeat className="w-3 h-3 mr-1" />
+                      Recurring
+                    </Badge>
+                  )}
+                </div>
               </div>
 
               {selectedHoliday.description && (
@@ -798,7 +1031,7 @@ const HolidaysPage = () => {
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800">
                 Create or remove holidays for a specific day of the week (e.g., all Saturdays).
-                Only future dates will be affected.
+                Only future dates will be affected. Recurring holidays appear grayed out in the calendar.
               </p>
             </div>
 
@@ -843,15 +1076,30 @@ const HolidaysPage = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="month">
-                    Current Month ({monthNames[currentDate.getMonth()]} {currentDate.getFullYear()})
-                  </SelectItem>
-                  <SelectItem value="year">
-                    Entire Year ({currentDate.getFullYear()})
-                  </SelectItem>
+                  <SelectItem value="month">Current Month</SelectItem>
+                  <SelectItem value="year">Entire Year ({currentYear})</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {recurringForm.scope === 'month' && (
+              <div>
+                <Label>Month</Label>
+                <Select
+                  value={String(selectedMonth)}
+                  onValueChange={(value) => setSelectedMonth(parseInt(value, 10))}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {monthNames.map((month, idx) => (
+                      <SelectItem key={idx} value={String(idx)}>{month}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div>
               <Label>Holiday Type</Label>
@@ -875,8 +1123,8 @@ const HolidaysPage = () => {
                 This will create holidays for all <strong>{getDayName(parseInt(recurringForm.day_of_week, 10))}s</strong> in{' '}
                 <strong>
                   {recurringForm.scope === 'month'
-                    ? `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`
-                    : currentDate.getFullYear()
+                    ? `${monthNames[selectedMonth]} ${currentYear}`
+                    : currentYear
                   }
                 </strong>
                 {' '}(only future dates)

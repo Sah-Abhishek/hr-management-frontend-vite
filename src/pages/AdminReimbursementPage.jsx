@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Receipt, CheckCircle, XCircle, Clock, Send, AlertCircle, Search, Filter, DollarSign, Users, FileText, Eye, Image } from 'lucide-react';
+import {
+  Receipt, CheckCircle, XCircle, Clock, Send, AlertCircle, Search,
+  Filter, DollarSign, Users, FileText, Eye, Image, User, X,
+  CheckSquare, Square, ChevronDown, Mail, Phone, Briefcase
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,12 +13,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { format } from 'date-fns';
 
 const AdminReimbursementsPage = () => {
   const [reimbursements, setReimbursements] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('pending');
   const [searchQuery, setSearchQuery] = useState('');
@@ -24,8 +30,18 @@ const AdminReimbursementsPage = () => {
   const [adminRemarks, setAdminRemarks] = useState('');
   const [processing, setProcessing] = useState(false);
 
+  // Employee filter state
+  const [selectedEmployeeEmail, setSelectedEmployeeEmail] = useState('all');
+  const [showEmployeePanel, setShowEmployeePanel] = useState(false);
+
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [showBulkActionModal, setShowBulkActionModal] = useState(false);
+  const [bulkActionType, setBulkActionType] = useState('');
+
   useEffect(() => {
     fetchReimbursements();
+    fetchEmployees();
   }, []);
 
   const fetchReimbursements = async () => {
@@ -41,8 +57,41 @@ const AdminReimbursementsPage = () => {
     }
   };
 
+  const fetchEmployees = async () => {
+    try {
+      const response = await api.get('/employees');
+      setEmployees(response.data || []);
+    } catch (error) {
+      console.error('Failed to fetch employees:', error);
+    }
+  };
+
+  // Get unique employees who have reimbursements
+  const getEmployeesWithReimbursements = () => {
+    const employeeMap = new Map();
+    reimbursements.forEach(r => {
+      if (r.employee_email && !employeeMap.has(r.employee_email)) {
+        employeeMap.set(r.employee_email, {
+          email: r.employee_email,
+          name: r.employee_name,
+          count: reimbursements.filter(x => x.employee_email === r.employee_email).length,
+          pendingCount: reimbursements.filter(x => x.employee_email === r.employee_email && x.status === 'pending').length,
+          totalAmount: reimbursements
+            .filter(x => x.employee_email === r.employee_email)
+            .reduce((sum, x) => sum + (parseFloat(x.amount) || 0), 0)
+        });
+      }
+    });
+    return Array.from(employeeMap.values());
+  };
+
   const getFilteredReimbursements = () => {
     let filtered = reimbursements;
+
+    // Filter by selected employee
+    if (selectedEmployeeEmail && selectedEmployeeEmail !== 'all') {
+      filtered = filtered.filter(r => r.employee_email === selectedEmployeeEmail);
+    }
 
     // Filter by tab
     if (activeTab !== 'all') {
@@ -63,9 +112,16 @@ const AdminReimbursementsPage = () => {
   };
 
   const getStats = () => {
-    const pending = reimbursements.filter(r => r.status === 'pending');
-    const approved = reimbursements.filter(r => r.status === 'approved');
-    const cleared = reimbursements.filter(r => r.status === 'cleared');
+    // Use filtered by employee if selected
+    let data = reimbursements;
+    if (selectedEmployeeEmail && selectedEmployeeEmail !== 'all') {
+      data = reimbursements.filter(r => r.employee_email === selectedEmployeeEmail);
+    }
+
+    const pending = data.filter(r => r.status === 'pending');
+    const approved = data.filter(r => r.status === 'approved');
+    const cleared = data.filter(r => r.status === 'cleared');
+    const rejected = data.filter(r => r.status === 'rejected');
 
     return {
       pendingCount: pending.length,
@@ -74,8 +130,22 @@ const AdminReimbursementsPage = () => {
       approvedAmount: approved.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0),
       clearedCount: cleared.length,
       clearedAmount: cleared.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0),
-      totalCount: reimbursements.length,
-      totalAmount: reimbursements.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0)
+      rejectedCount: rejected.length,
+      rejectedAmount: rejected.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0),
+      totalCount: data.length,
+      totalAmount: data.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0)
+    };
+  };
+
+  // Get selected employee details
+  const getSelectedEmployeeDetails = () => {
+    if (!selectedEmployeeEmail || selectedEmployeeEmail === 'all') return null;
+    const emp = employees.find(e => e.email === selectedEmployeeEmail);
+    const reimbData = reimbursements.filter(r => r.employee_email === selectedEmployeeEmail);
+    return {
+      ...emp,
+      reimbursementCount: reimbData.length,
+      totalAmount: reimbData.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0)
     };
   };
 
@@ -110,6 +180,95 @@ const AdminReimbursementsPage = () => {
     } finally {
       setProcessing(false);
     }
+  };
+
+  // Bulk selection handlers
+  const toggleSelect = (id) => {
+    setSelectedIds(prev =>
+      prev.includes(id)
+        ? prev.filter(x => x !== id)
+        : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    const filteredIds = getFilteredReimbursements()
+      .filter(r => {
+        // Only allow selection of actionable items
+        if (bulkActionType === 'approve' || bulkActionType === 'reject') {
+          return r.status === 'pending';
+        }
+        if (bulkActionType === 'clear') {
+          return r.status === 'approved';
+        }
+        return r.status === 'pending' || r.status === 'approved';
+      })
+      .map(r => r.id);
+
+    if (selectedIds.length === filteredIds.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredIds);
+    }
+  };
+
+  const getSelectableItems = () => {
+    return getFilteredReimbursements().filter(r =>
+      r.status === 'pending' || r.status === 'approved'
+    );
+  };
+
+  const handleBulkAction = (action) => {
+    if (selectedIds.length === 0) {
+      toast.error('Please select at least one request');
+      return;
+    }
+    setBulkActionType(action);
+    setAdminRemarks('');
+    setShowBulkActionModal(true);
+  };
+
+  const processBulkAction = async () => {
+    if (selectedIds.length === 0) return;
+
+    setProcessing(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    try {
+      for (const id of selectedIds) {
+        try {
+          await api.post(`/reimbursements/${id}/action`, {
+            action: bulkActionType,
+            remarks: adminRemarks
+          });
+          successCount++;
+        } catch (error) {
+          errorCount++;
+          console.error(`Failed to process ${id}:`, error);
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`Successfully processed ${successCount} request(s)`);
+      }
+      if (errorCount > 0) {
+        toast.error(`Failed to process ${errorCount} request(s)`);
+      }
+
+      setShowBulkActionModal(false);
+      setSelectedIds([]);
+      fetchReimbursements();
+    } catch (error) {
+      toast.error('Bulk action failed');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const clearEmployeeFilter = () => {
+    setSelectedEmployeeEmail('all');
+    setSelectedIds([]);
   };
 
   const getStatusBadge = (status) => {
@@ -147,26 +306,165 @@ const AdminReimbursementsPage = () => {
     }
   };
 
+  const getInitials = (name) => {
+    if (!name) return '?';
+    const parts = name.trim().split(' ');
+    if (parts.length === 1) return parts[0][0]?.toUpperCase() || '?';
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  const getAvatarColor = (name) => {
+    const colors = [
+      'from-blue-500 to-blue-600',
+      'from-emerald-500 to-emerald-600',
+      'from-purple-500 to-purple-600',
+      'from-amber-500 to-amber-600',
+      'from-rose-500 to-rose-600',
+      'from-cyan-500 to-cyan-600',
+      'from-indigo-500 to-indigo-600',
+      'from-pink-500 to-pink-600',
+    ];
+    if (!name) return colors[0];
+    const index = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
+    return colors[index];
+  };
+
   const stats = getStats();
   const filteredReimbursements = getFilteredReimbursements();
+  const employeesWithReimbursements = getEmployeesWithReimbursements();
+  const selectedEmployeeDetails = getSelectedEmployeeDetails();
+  const selectableItems = getSelectableItems();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-3 bg-slate-800 rounded-xl shadow-lg">
-              <Receipt className="w-6 h-6 text-white" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-slate-800 rounded-xl shadow-lg">
+                <Receipt className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-slate-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+                  Reimbursement Management
+                </h1>
+                <p className="text-slate-600">Review and process employee reimbursement requests</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-3xl font-bold text-slate-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-                Reimbursement Management
-              </h1>
-              <p className="text-slate-600">Review and process employee reimbursement requests</p>
-            </div>
+            <Button
+              variant={showEmployeePanel ? 'default' : 'outline'}
+              onClick={() => setShowEmployeePanel(!showEmployeePanel)}
+              className={showEmployeePanel ? 'bg-slate-800 hover:bg-slate-900' : ''}
+            >
+              <Users className="w-4 h-4 mr-2" />
+              Filter by Employee
+            </Button>
           </div>
         </div>
+
+        {/* Employee Selection Panel */}
+        {showEmployeePanel && (
+          <Card className="border-0 shadow-md mb-6">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Users className="w-5 h-5 text-slate-600" />
+                Select Employee to View Requests
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {/* All Employees Option */}
+                <div
+                  onClick={clearEmployeeFilter}
+                  className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${selectedEmployeeEmail === 'all'
+                      ? 'border-slate-800 bg-slate-50'
+                      : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                >
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center text-white font-bold mb-2">
+                      <Users className="w-6 h-6" />
+                    </div>
+                    <p className="font-medium text-slate-900 text-sm">All Employees</p>
+                    <p className="text-xs text-slate-500">{reimbursements.length} requests</p>
+                  </div>
+                </div>
+
+                {/* Individual Employees */}
+                {employeesWithReimbursements.map((emp) => (
+                  <div
+                    key={emp.email}
+                    onClick={() => {
+                      setSelectedEmployeeEmail(emp.email);
+                      setSelectedIds([]);
+                    }}
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${selectedEmployeeEmail === emp.email
+                        ? 'border-slate-800 bg-slate-50'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                  >
+                    <div className="flex flex-col items-center text-center">
+                      <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarColor(emp.name)} flex items-center justify-center text-white font-bold mb-2`}>
+                        {getInitials(emp.name)}
+                      </div>
+                      <p className="font-medium text-slate-900 text-sm truncate w-full">{emp.name}</p>
+                      <p className="text-xs text-slate-500">{emp.count} requests</p>
+                      {emp.pendingCount > 0 && (
+                        <Badge className="bg-amber-100 text-amber-700 text-xs mt-1">
+                          {emp.pendingCount} pending
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Selected Employee Info Card */}
+        {selectedEmployeeDetails && (
+          <Card className="border-0 shadow-md mb-6 bg-gradient-to-r from-slate-800 to-slate-900 text-white">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className={`w-16 h-16 rounded-full bg-gradient-to-br ${getAvatarColor(selectedEmployeeDetails.full_name)} flex items-center justify-center text-white text-xl font-bold ring-4 ring-white/20`}>
+                    {getInitials(selectedEmployeeDetails.full_name)}
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold">{selectedEmployeeDetails.full_name}</h2>
+                    <div className="flex items-center gap-4 mt-1 text-slate-300">
+                      <span className="flex items-center gap-1">
+                        <Mail className="w-4 h-4" />
+                        {selectedEmployeeDetails.email}
+                      </span>
+                      {selectedEmployeeDetails.department && (
+                        <span className="flex items-center gap-1">
+                          <Briefcase className="w-4 h-4" />
+                          {selectedEmployeeDetails.department}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-slate-300">Total Reimbursements</p>
+                  <p className="text-3xl font-bold">₹{stats.totalAmount.toLocaleString()}</p>
+                  <p className="text-sm text-slate-400">{stats.totalCount} requests</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearEmployeeFilter}
+                  className="text-white hover:bg-white/10"
+                >
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
@@ -235,7 +533,12 @@ const AdminReimbursementsPage = () => {
         <Card className="border-0 shadow-md">
           <CardHeader className="border-b border-slate-100">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <CardTitle className="text-xl">All Reimbursement Requests</CardTitle>
+              <CardTitle className="text-xl">
+                {selectedEmployeeEmail !== 'all'
+                  ? `Requests from ${employeesWithReimbursements.find(e => e.email === selectedEmployeeEmail)?.name || 'Employee'}`
+                  : 'All Reimbursement Requests'
+                }
+              </CardTitle>
               <div className="flex items-center gap-3">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -250,33 +553,82 @@ const AdminReimbursementsPage = () => {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedIds([]); }}>
               <div className="px-6 pt-4 border-b border-slate-100">
-                <TabsList className="bg-slate-100">
-                  <TabsTrigger value="pending" className="gap-2">
-                    <Clock className="w-4 h-4" />
-                    Pending
-                    {stats.pendingCount > 0 && (
-                      <Badge className="bg-amber-500 text-white ml-1">{stats.pendingCount}</Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="approved" className="gap-2">
-                    <CheckCircle className="w-4 h-4" />
-                    Approved
-                    {stats.approvedCount > 0 && (
-                      <Badge className="bg-blue-500 text-white ml-1">{stats.approvedCount}</Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="cleared" className="gap-2">
-                    <CheckCircle className="w-4 h-4" />
-                    Cleared
-                  </TabsTrigger>
-                  <TabsTrigger value="rejected" className="gap-2">
-                    <XCircle className="w-4 h-4" />
-                    Rejected
-                  </TabsTrigger>
-                  <TabsTrigger value="all">All</TabsTrigger>
-                </TabsList>
+                <div className="flex items-center justify-between">
+                  <TabsList className="bg-slate-100">
+                    <TabsTrigger value="pending" className="gap-2">
+                      <Clock className="w-4 h-4" />
+                      Pending
+                      {stats.pendingCount > 0 && (
+                        <Badge className="bg-amber-500 text-white ml-1">{stats.pendingCount}</Badge>
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger value="approved" className="gap-2">
+                      <CheckCircle className="w-4 h-4" />
+                      Approved
+                      {stats.approvedCount > 0 && (
+                        <Badge className="bg-blue-500 text-white ml-1">{stats.approvedCount}</Badge>
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger value="cleared" className="gap-2">
+                      <CheckCircle className="w-4 h-4" />
+                      Cleared
+                    </TabsTrigger>
+                    <TabsTrigger value="rejected" className="gap-2">
+                      <XCircle className="w-4 h-4" />
+                      Rejected
+                    </TabsTrigger>
+                    <TabsTrigger value="all">All</TabsTrigger>
+                  </TabsList>
+
+                  {/* Bulk Action Buttons */}
+                  {selectableItems.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      {selectedIds.length > 0 && (
+                        <span className="text-sm text-slate-500">
+                          {selectedIds.length} selected
+                        </span>
+                      )}
+                      {activeTab === 'pending' && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleBulkAction('approve')}
+                            disabled={selectedIds.length === 0}
+                            className="gap-1"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            Bulk Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleBulkAction('reject')}
+                            disabled={selectedIds.length === 0}
+                            className="gap-1 text-red-600 hover:text-red-700"
+                          >
+                            <XCircle className="w-4 h-4" />
+                            Bulk Reject
+                          </Button>
+                        </>
+                      )}
+                      {activeTab === 'approved' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleBulkAction('clear')}
+                          disabled={selectedIds.length === 0}
+                          className="gap-1 text-emerald-600 hover:text-emerald-700"
+                        >
+                          <Send className="w-4 h-4" />
+                          Bulk Clear
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="p-6">
@@ -297,15 +649,46 @@ const AdminReimbursementsPage = () => {
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    {/* Select All Header */}
+                    {selectableItems.length > 0 && (activeTab === 'pending' || activeTab === 'approved') && (
+                      <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                        <Checkbox
+                          checked={selectedIds.length === selectableItems.filter(r => r.status === activeTab).length && selectedIds.length > 0}
+                          onCheckedChange={() => {
+                            const tabItems = selectableItems.filter(r => r.status === activeTab).map(r => r.id);
+                            if (selectedIds.length === tabItems.length) {
+                              setSelectedIds([]);
+                            } else {
+                              setSelectedIds(tabItems);
+                            }
+                          }}
+                        />
+                        <span className="text-sm text-slate-600">
+                          Select all {activeTab} requests ({selectableItems.filter(r => r.status === activeTab).length})
+                        </span>
+                      </div>
+                    )}
+
                     {filteredReimbursements.map((reimbursement) => (
                       <div
                         key={reimbursement.id}
-                        className="border border-slate-200 rounded-xl p-5 hover:shadow-md transition-shadow bg-white"
+                        className={`border rounded-xl p-5 hover:shadow-md transition-shadow bg-white ${selectedIds.includes(reimbursement.id) ? 'border-slate-800 bg-slate-50' : 'border-slate-200'
+                          }`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex gap-4">
-                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-white font-bold">
-                              {reimbursement.employee_name?.charAt(0) || '?'}
+                            {/* Checkbox for selectable items */}
+                            {(reimbursement.status === 'pending' || reimbursement.status === 'approved') && (
+                              <div className="pt-1">
+                                <Checkbox
+                                  checked={selectedIds.includes(reimbursement.id)}
+                                  onCheckedChange={() => toggleSelect(reimbursement.id)}
+                                />
+                              </div>
+                            )}
+
+                            <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarColor(reimbursement.employee_name)} flex items-center justify-center text-white font-bold`}>
+                              {getInitials(reimbursement.employee_name)}
                             </div>
                             <div>
                               <h3 className="font-semibold text-slate-800 text-lg">{reimbursement.title}</h3>
@@ -391,7 +774,7 @@ const AdminReimbursementsPage = () => {
           </CardContent>
         </Card>
 
-        {/* Action Modal */}
+        {/* Single Action Modal */}
         <Dialog open={showActionModal} onOpenChange={setShowActionModal}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -472,6 +855,91 @@ const AdminReimbursementsPage = () => {
                     {actionType === 'approve' && 'Approve'}
                     {actionType === 'reject' && 'Reject'}
                     {actionType === 'clear' && 'Clear & Send Email'}
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Bulk Action Modal */}
+        <Dialog open={showBulkActionModal} onOpenChange={setShowBulkActionModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {bulkActionType === 'approve' && <CheckCircle className="w-5 h-5 text-blue-600" />}
+                {bulkActionType === 'reject' && <XCircle className="w-5 h-5 text-red-600" />}
+                {bulkActionType === 'clear' && <Send className="w-5 h-5 text-emerald-600" />}
+                Bulk {bulkActionType === 'approve' ? 'Approve' : bulkActionType === 'reject' ? 'Reject' : 'Clear'} Reimbursements
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="py-4">
+              <div className="p-4 bg-slate-50 rounded-xl mb-4">
+                <p className="font-semibold text-slate-800 mb-2">
+                  {selectedIds.length} request(s) selected
+                </p>
+                <p className="text-2xl font-bold text-slate-800">
+                  ₹{reimbursements
+                    .filter(r => selectedIds.includes(r.id))
+                    .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0)
+                    .toLocaleString()}
+                </p>
+                <p className="text-sm text-slate-500 mt-1">Total amount</p>
+              </div>
+
+              {bulkActionType === 'clear' && (
+                <div className="p-4 bg-emerald-50 rounded-xl mb-4 border border-emerald-200">
+                  <p className="text-sm text-emerald-700">
+                    <strong>Note:</strong> Email notifications will be sent to all employees confirming their reimbursements have been cleared.
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <Label className="text-slate-700 font-medium">
+                  Remarks {bulkActionType === 'reject' ? '*' : '(Optional)'}
+                </Label>
+                <Textarea
+                  placeholder={
+                    bulkActionType === 'reject'
+                      ? 'Please provide a reason for rejection...'
+                      : 'Add any remarks or notes (applies to all selected)...'
+                  }
+                  value={adminRemarks}
+                  onChange={(e) => setAdminRemarks(e.target.value)}
+                  className="mt-1.5"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowBulkActionModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={processBulkAction}
+                disabled={processing || (bulkActionType === 'reject' && !adminRemarks.trim())}
+                className={
+                  bulkActionType === 'approve' ? 'bg-blue-600 hover:bg-blue-700' :
+                    bulkActionType === 'reject' ? 'bg-red-600 hover:bg-red-700' :
+                      'bg-emerald-600 hover:bg-emerald-700'
+                }
+              >
+                {processing ? (
+                  <>
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                    Processing {selectedIds.length} requests...
+                  </>
+                ) : (
+                  <>
+                    {bulkActionType === 'approve' && `Approve ${selectedIds.length} Requests`}
+                    {bulkActionType === 'reject' && `Reject ${selectedIds.length} Requests`}
+                    {bulkActionType === 'clear' && `Clear ${selectedIds.length} Requests`}
                   </>
                 )}
               </Button>
