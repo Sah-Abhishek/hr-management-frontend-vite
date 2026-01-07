@@ -82,6 +82,7 @@ const Layout = () => {
     { name: 'Salary Template', href: '/salary-template', icon: LayoutIcon, roles: ['admin'] },
     { name: 'Settings', href: '/settings', icon: Settings, roles: ['admin'] },
     { name: 'Notifications', href: '/notifications', icon: Bell, roles: ['admin'] },
+    { name: 'Leave Balance Management', href: '/admin/leave-management', icon: Bell, roles: ['admin'] },
     { name: 'Profile', href: '/profile', icon: User, roles: ['admin', 'manager', 'employee'] },
   ];
 

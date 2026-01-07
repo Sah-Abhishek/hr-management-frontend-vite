@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, User, Mail, Phone, Briefcase, Edit2, Search, Filter } from 'lucide-react';
+import { Plus, User, Mail, Phone, Briefcase, Edit2, Search, Filter, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -36,6 +36,7 @@ const EmployeesPage = () => {
     phone: '',
     organization_id: 'none',
     manager_email: '',
+    joining_date: new Date().toISOString().split('T')[0], // Default to today
   });
 
   useEffect(() => {
@@ -92,7 +93,8 @@ const EmployeesPage = () => {
         role: 'employee', // Default role
         designation: 'Employee', // Default designation
         organization_id: (employeeForm.organization_id && employeeForm.organization_id !== 'none') ? employeeForm.organization_id : null,
-        manager_email: employeeForm.manager_email === 'none' ? '' : employeeForm.manager_email
+        manager_email: employeeForm.manager_email === 'none' ? '' : employeeForm.manager_email,
+        joining_date: employeeForm.joining_date ? new Date(employeeForm.joining_date).toISOString() : new Date().toISOString(),
       });
       toast.success('Employee added successfully!');
       setDialogOpen(false);
@@ -104,6 +106,7 @@ const EmployeesPage = () => {
         phone: '',
         organization_id: 'none',
         manager_email: '',
+        joining_date: new Date().toISOString().split('T')[0],
       });
       fetchEmployees();
     } catch (error) {
@@ -125,7 +128,12 @@ const EmployeesPage = () => {
   };
 
   const handleEdit = (employee) => {
-    setSelectedEmployee(employee);
+    setSelectedEmployee({
+      ...employee,
+      joining_date: employee.joining_date
+        ? new Date(employee.joining_date).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0]
+    });
     setEditDialogOpen(true);
   };
 
@@ -150,7 +158,10 @@ const EmployeesPage = () => {
         manager_email:
           selectedEmployee.manager_email === 'none'
             ? null
-            : selectedEmployee.manager_email
+            : selectedEmployee.manager_email,
+        joining_date: selectedEmployee.joining_date
+          ? new Date(selectedEmployee.joining_date).toISOString()
+          : null,
       });
 
 
@@ -293,6 +304,27 @@ const EmployeesPage = () => {
                     className="mt-1"
                   />
                 </div>
+
+                {/* Joining Date Field */}
+                <div>
+                  <Label htmlFor="emp-joining-date">Joining Date *</Label>
+                  <div className="relative mt-1">
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+                    <Input
+                      id="emp-joining-date"
+                      data-testid="emp-joining-date-input"
+                      type="date"
+                      value={employeeForm.joining_date}
+                      onChange={(e) => setEmployeeForm({ ...employeeForm, joining_date: e.target.value })}
+                      required
+                      className="pl-10"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Used to calculate monthly leave credits (Earned Leave, Sick Leave)
+                  </p>
+                </div>
+
                 <div>
                   <Label htmlFor="emp-organization">Organization</Label>
                   <Select
@@ -332,6 +364,29 @@ const EmployeesPage = () => {
                     <p className="text-xs text-amber-600 mt-1">Go to Settings to add departments</p>
                   )}
                 </div>
+
+                {/* Manager Selection */}
+                <div>
+                  <Label htmlFor="emp-manager">Manager</Label>
+                  <Select
+                    value={employeeForm.manager_email || 'none'}
+                    onValueChange={(value) => setEmployeeForm({ ...employeeForm, manager_email: value })}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select manager (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {managers.map(mgr => (
+                        <SelectItem key={mgr.email} value={mgr.email}>
+                          {mgr.full_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500 mt-1">Manager will approve leave requests</p>
+                </div>
+
                 <div>
                   <Label htmlFor="emp-password">Temporary Password *</Label>
                   <Input
@@ -392,6 +447,26 @@ const EmployeesPage = () => {
                   required
                   className="mt-1"
                 />
+              </div>
+
+              {/* Joining Date */}
+              <div>
+                <Label>Joining Date *</Label>
+                <div className="relative mt-1">
+                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+                  <Input
+                    type="date"
+                    value={selectedEmployee.joining_date || ''}
+                    onChange={(e) =>
+                      setSelectedEmployee({ ...selectedEmployee, joining_date: e.target.value })
+                    }
+                    required
+                    className="pl-10"
+                  />
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Changing this will affect monthly leave credit calculations
+                </p>
               </div>
 
               {/* Organization */}
@@ -736,9 +811,12 @@ const EmployeesPage = () => {
               )}
 
               <div className="mt-3 pt-3 border-t border-slate-100">
-                <p className="text-xs text-slate-500">
-                  Joined {format(new Date(employee.joining_date), 'MMM dd, yyyy')}
-                </p>
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-3 h-3 text-slate-400" />
+                  <p className="text-xs text-slate-500">
+                    Joined {format(new Date(employee.joining_date), 'MMM dd, yyyy')}
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>

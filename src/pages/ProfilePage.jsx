@@ -725,8 +725,8 @@ const ProfilePage = () => {
 
                 {/* Paid Leave */}
                 <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
-                  <p className="text-xs font-medium text-emerald-700 mb-1">Paid Leave</p>
-                  <p className="text-2xl font-bold text-emerald-900">{employee.leave_balance?.paid_leave ?? 0}</p>
+                  <p className="text-xs font-medium text-emerald-700 mb-1">Earnedd Leave</p>
+                  <p className="text-2xl font-bold text-emerald-900">{employee.leave_balance?.earned_leave ?? 0}</p>
                   <p className="text-xs text-emerald-600">days remaining</p>
                 </div>
 

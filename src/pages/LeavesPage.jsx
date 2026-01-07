@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, X, Gift, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Plus, Calendar, X, Gift, AlertCircle, Clock, AlertTriangle, Info, CheckCircle2, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -8,9 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import api from '@/lib/api';
-import { format, eachDayOfInterval, isSameDay, isWeekend, parseISO, differenceInDays } from 'date-fns';
+import { format, eachDayOfInterval, differenceInDays, addDays } from 'date-fns';
 
 const LeavesPage = () => {
   const [leaves, setLeaves] = useState([]);
@@ -20,41 +21,75 @@ const LeavesPage = () => {
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [leaveBalance, setLeaveBalance] = useState({});
   const [compOffBalance, setCompOffBalance] = useState(0);
+  const [leavePolicy, setLeavePolicy] = useState(null);
+  const [joiningDate, setJoiningDate] = useState(null);
+
+  // Validation states
+  const [validationWarnings, setValidationWarnings] = useState([]);
+  const [validationErrors, setValidationErrors] = useState([]);
+  const [isValidating, setIsValidating] = useState(false);
+  const [forceSubmit, setForceSubmit] = useState(false);
+
+  // NEW: Per-day leave type selection
+  // Format: { '2024-01-07': 'Earned Leave', '2024-01-08': 'Casual Leave', ... }
+  const [dateLeaveTypes, setDateLeaveTypes] = useState({});
+  const [defaultLeaveType, setDefaultLeaveType] = useState('Earned Leave');
 
   const [leaveForm, setLeaveForm] = useState({
-    leave_type: 'Sick Leave',
     dates: [],
     reason: '',
     is_half_day: false,
     half_day_period: 'morning',
   });
 
-  // For date range selection
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
   useEffect(() => {
     fetchLeaves();
     fetchProfile();
-    loadLeaveTypes();
+    loadLeavePolicy();
   }, []);
 
-  const loadLeaveTypes = () => {
-    const saved = localStorage.getItem('leave_types');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      // Add Comp Off if not present
-      if (!parsed.find(t => t.name.toLowerCase().includes('comp'))) {
-        parsed.push({ name: 'Comp Off', quota: 0 });
+  const loadLeavePolicy = async () => {
+    try {
+      const response = await api.get('/leaves/leave-policy');
+      setLeavePolicy(response.data);
+
+      if (response.data?.policies) {
+        const types = response.data.policies.map(p => ({
+          name: p.leave_type,
+          quota: p.annual_quota,
+          credit_type: p.credit_type || 'annually',
+          monthly_credit: p.monthly_credit || 0,
+          advance_days_required: p.advance_days_required || 0,
+          encashment_allowed: p.encashment_allowed || false,
+          carry_forward_allowed: p.carry_forward_allowed || false,
+          clubbing_not_allowed_with: p.clubbing_not_allowed_with || []
+        }));
+
+        // Add Comp Off if not present
+        if (!types.find(t => t.name.toLowerCase().includes('comp'))) {
+          types.push({
+            name: 'Comp Off',
+            quota: 0,
+            credit_type: 'earned',
+            advance_days_required: 0,
+            encashment_allowed: false,
+            carry_forward_allowed: true,
+            clubbing_not_allowed_with: []
+          });
+        }
+        setLeaveTypes(types);
       }
-      setLeaveTypes(parsed);
-    } else {
+    } catch (error) {
+      console.error('Failed to load leave policy:', error);
       setLeaveTypes([
-        { name: 'Sick Leave', quota: 12 },
-        { name: 'Casual Leave', quota: 12 },
-        { name: 'Paid Leave', quota: 15 },
-        { name: 'Unpaid Leave', quota: 0 },
-        { name: 'Comp Off', quota: 0 }
+        { name: 'Earned Leave', quota: 12, credit_type: 'monthly', monthly_credit: 1, advance_days_required: 7, clubbing_not_allowed_with: [] },
+        { name: 'Sick Leave', quota: 6, credit_type: 'monthly', monthly_credit: 0.5, advance_days_required: 0, clubbing_not_allowed_with: ['Casual Leave'] },
+        { name: 'Casual Leave', quota: 6, credit_type: 'annually', advance_days_required: 0, clubbing_not_allowed_with: ['Sick Leave'] },
+        { name: 'Unpaid Leave', quota: 0, credit_type: 'annually', advance_days_required: 0, clubbing_not_allowed_with: [] },
+        { name: 'Comp Off', quota: 0, credit_type: 'earned', advance_days_required: 0, clubbing_not_allowed_with: [] }
       ]);
     }
   };
@@ -76,14 +111,135 @@ const LeavesPage = () => {
       const response = await api.get('/auth/me');
       setLeaveBalance(response.data.leave_balance || {});
       setCompOffBalance(response.data.leave_balance?.comp_off || 0);
+      setJoiningDate(response.data.joining_date ? new Date(response.data.joining_date) : null);
     } catch (error) {
       console.error('Failed to fetch profile:', error);
     }
   };
 
+  // Get unique leave types selected across all dates
+  const selectedLeaveTypes = useMemo(() => {
+    const types = new Set(Object.values(dateLeaveTypes));
+    return Array.from(types);
+  }, [dateLeaveTypes]);
+
+  // Check clubbing rules between selected leave types
+  const clubbingValidation = useMemo(() => {
+    const errors = [];
+    const types = selectedLeaveTypes;
+
+    if (types.length < 2) return { valid: true, errors: [] };
+
+    // Check each pair of leave types
+    for (let i = 0; i < types.length; i++) {
+      for (let j = i + 1; j < types.length; j++) {
+        const type1 = types[i];
+        const type2 = types[j];
+
+        const type1Info = leaveTypes.find(t => t.name === type1);
+        const type2Info = leaveTypes.find(t => t.name === type2);
+
+        // Check if type1 cannot be clubbed with type2
+        if (type1Info?.clubbing_not_allowed_with?.includes(type2)) {
+          errors.push({
+            type1,
+            type2,
+            message: `${type1} cannot be clubbed with ${type2}`
+          });
+        }
+        // Check reverse - if type2 cannot be clubbed with type1
+        else if (type2Info?.clubbing_not_allowed_with?.includes(type1)) {
+          errors.push({
+            type1: type2,
+            type2: type1,
+            message: `${type2} cannot be clubbed with ${type1}`
+          });
+        }
+      }
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }, [selectedLeaveTypes, leaveTypes]);
+
+  // Calculate balance usage per leave type
+  const balanceUsage = useMemo(() => {
+    const usage = {};
+
+    Object.entries(dateLeaveTypes).forEach(([date, type]) => {
+      if (!usage[type]) {
+        usage[type] = { days: 0, dates: [] };
+      }
+      // For half day, only count 0.5 if it's single date and half day selected
+      const dayValue = leaveForm.is_half_day && leaveForm.dates.length === 1 ? 0.5 : 1;
+      usage[type].days += dayValue;
+      usage[type].dates.push(date);
+    });
+
+    // Add balance info
+    Object.keys(usage).forEach(type => {
+      const key = type.toLowerCase().replace(/ /g, '_');
+      usage[type].available = leaveBalance[key] ?? 0;
+      usage[type].sufficient = usage[type].available >= usage[type].days;
+    });
+
+    return usage;
+  }, [dateLeaveTypes, leaveBalance, leaveForm.is_half_day, leaveForm.dates.length]);
+
+  // Check for insufficient balance
+  const insufficientBalanceTypes = useMemo(() => {
+    return Object.entries(balanceUsage)
+      .filter(([type, info]) => {
+        // Skip unpaid leave
+        if (type.toLowerCase().includes('unpaid')) return false;
+        return !info.sufficient;
+      })
+      .map(([type, info]) => ({
+        type,
+        available: info.available,
+        requested: info.days
+      }));
+  }, [balanceUsage]);
+
+  // Validate advance notice for all selected leave types
+  const advanceNoticeWarnings = useMemo(() => {
+    const warnings = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    Object.entries(dateLeaveTypes).forEach(([dateStr, leaveType]) => {
+      const typeInfo = leaveTypes.find(t => t.name === leaveType);
+      if (!typeInfo || !typeInfo.advance_days_required) return;
+
+      const leaveDate = new Date(dateStr);
+      leaveDate.setHours(0, 0, 0, 0);
+
+      const diffDays = Math.ceil((leaveDate - today) / (1000 * 60 * 60 * 24));
+
+      if (diffDays < typeInfo.advance_days_required) {
+        // Check if we already have this warning
+        const existingWarning = warnings.find(w => w.leaveType === leaveType);
+        if (!existingWarning) {
+          warnings.push({
+            leaveType,
+            required: typeInfo.advance_days_required,
+            dates: [dateStr]
+          });
+        } else {
+          existingWarning.dates.push(dateStr);
+        }
+      }
+    });
+
+    return warnings;
+  }, [dateLeaveTypes, leaveTypes]);
+
   const handleDateRangeChange = () => {
     if (!startDate || !endDate) {
       setLeaveForm(prev => ({ ...prev, dates: [] }));
+      setDateLeaveTypes({});
       return;
     }
 
@@ -95,27 +251,63 @@ const LeavesPage = () => {
       return;
     }
 
-    // Generate all dates in range
     const dates = eachDayOfInterval({ start, end });
-    setLeaveForm(prev => ({
-      ...prev,
-      dates: dates.map(d => format(d, 'yyyy-MM-dd'))
-    }));
+    const dateStrings = dates.map(d => format(d, 'yyyy-MM-dd'));
+
+    // Initialize leave types for new dates with default type
+    const newDateLeaveTypes = {};
+    dateStrings.forEach(dateStr => {
+      newDateLeaveTypes[dateStr] = dateLeaveTypes[dateStr] || defaultLeaveType;
+    });
+
+    setLeaveForm(prev => ({ ...prev, dates: dateStrings }));
+    setDateLeaveTypes(newDateLeaveTypes);
   };
 
   useEffect(() => {
     handleDateRangeChange();
   }, [startDate, endDate]);
 
+  // Update leave type for a specific date
+  const updateDateLeaveType = (dateStr, leaveType) => {
+    setDateLeaveTypes(prev => ({
+      ...prev,
+      [dateStr]: leaveType
+    }));
+  };
+
+  // Apply a leave type to all dates
+  const applyLeaveTypeToAll = (leaveType) => {
+    const newDateLeaveTypes = {};
+    leaveForm.dates.forEach(dateStr => {
+      newDateLeaveTypes[dateStr] = leaveType;
+    });
+    setDateLeaveTypes(newDateLeaveTypes);
+    setDefaultLeaveType(leaveType);
+  };
+
   const toggleDate = (dateStr) => {
     setLeaveForm(prev => {
       const exists = prev.dates.includes(dateStr);
-      return {
-        ...prev,
-        dates: exists
-          ? prev.dates.filter(d => d !== dateStr)
-          : [...prev.dates, dateStr].sort()
-      };
+      const newDates = exists
+        ? prev.dates.filter(d => d !== dateStr)
+        : [...prev.dates, dateStr].sort();
+
+      // Update dateLeaveTypes accordingly
+      if (exists) {
+        setDateLeaveTypes(prevTypes => {
+          const newTypes = { ...prevTypes };
+          delete newTypes[dateStr];
+          return newTypes;
+        });
+      } else {
+        setDateLeaveTypes(prevTypes => ({
+          ...prevTypes,
+          [dateStr]: defaultLeaveType
+        }));
+      }
+
+      return { ...prev, dates: newDates };
     });
   };
 
@@ -127,39 +319,77 @@ const LeavesPage = () => {
       return;
     }
 
-    // Calculate days
-    let daysCount = leaveForm.dates.length;
-    if (leaveForm.is_half_day && leaveForm.dates.length === 1) {
-      daysCount = 0.5;
+    // Check clubbing validation
+    if (!clubbingValidation.valid) {
+      toast.error(clubbingValidation.errors[0].message);
+      return;
     }
 
-    // Check balance for Comp Off
-    if (leaveForm.leave_type === 'Comp Off') {
-      if (compOffBalance < daysCount) {
-        toast.error(`Insufficient comp-off balance. Available: ${compOffBalance} days, Requested: ${daysCount} days`);
-        return;
-      }
+    // Check balance for all types
+    if (insufficientBalanceTypes.length > 0) {
+      const first = insufficientBalanceTypes[0];
+      toast.error(`Insufficient ${first.type} balance. Available: ${first.available}, Requested: ${first.requested}`);
+      return;
     }
 
     setSubmitting(true);
 
     try {
-      const payload = {
-        leave_type: leaveForm.leave_type,
-        dates: leaveForm.dates,
-        reason: leaveForm.reason,
-        is_half_day: leaveForm.is_half_day,
-        half_day_period: leaveForm.half_day_period,
-      };
+      // Group dates by leave type
+      const leaveGroups = {};
+      Object.entries(dateLeaveTypes).forEach(([dateStr, leaveType]) => {
+        if (!leaveGroups[leaveType]) {
+          leaveGroups[leaveType] = [];
+        }
+        leaveGroups[leaveType].push(dateStr);
+      });
 
-      await api.post('/leaves', payload);
-      toast.success('Leave application submitted successfully!');
+      // Submit separate leave applications for each leave type
+      const submissions = Object.entries(leaveGroups).map(async ([leaveType, dates]) => {
+        const payload = {
+          leave_type: leaveType,
+          dates: dates.sort(),
+          reason: leaveForm.reason,
+          is_half_day: leaveForm.is_half_day && dates.length === 1,
+          half_day_period: leaveForm.half_day_period,
+          force_submit: forceSubmit
+        };
+
+        return api.post('/leaves', payload);
+      });
+
+      await Promise.all(submissions);
+
+      const count = Object.keys(leaveGroups).length;
+      toast.success(
+        count > 1
+          ? `${count} leave applications submitted successfully!`
+          : 'Leave application submitted successfully!'
+      );
+
       setDialogOpen(false);
       resetForm();
       fetchLeaves();
-      fetchProfile(); // Refresh balance
+      fetchProfile();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to submit leave application');
+      const errorData = error.response?.data;
+
+      if (errorData?.can_override && errorData?.warning_type === 'advance_notice') {
+        toast.warning(errorData.detail, {
+          action: {
+            label: 'Submit Anyway',
+            onClick: () => {
+              setForceSubmit(true);
+              setTimeout(() => {
+                document.getElementById('leave-submit-btn')?.click();
+              }, 100);
+            }
+          },
+          duration: 10000
+        });
+      } else {
+        toast.error(errorData?.detail || 'Failed to submit leave application');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -167,7 +397,6 @@ const LeavesPage = () => {
 
   const resetForm = () => {
     setLeaveForm({
-      leave_type: 'Sick Leave',
       dates: [],
       reason: '',
       is_half_day: false,
@@ -175,6 +404,11 @@ const LeavesPage = () => {
     });
     setStartDate('');
     setEndDate('');
+    setDateLeaveTypes({});
+    setDefaultLeaveType('Earned Leave');
+    setValidationWarnings([]);
+    setValidationErrors([]);
+    setForceSubmit(false);
   };
 
   const getStatusBadge = (status) => {
@@ -202,10 +436,23 @@ const LeavesPage = () => {
       'Sick Leave': 'border-red-200 bg-red-50',
       'Casual Leave': 'border-blue-200 bg-blue-50',
       'Paid Leave': 'border-emerald-200 bg-emerald-50',
+      'Earned Leave': 'border-emerald-200 bg-emerald-50',
       'Unpaid Leave': 'border-amber-200 bg-amber-50',
       'Comp Off': 'border-purple-200 bg-purple-50',
     };
     return colors[type] || 'border-slate-200 bg-slate-50';
+  };
+
+  const getLeaveTypeBadgeColor = (type) => {
+    const colors = {
+      'Sick Leave': 'bg-red-100 text-red-800 border-red-200',
+      'Casual Leave': 'bg-blue-100 text-blue-800 border-blue-200',
+      'Paid Leave': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      'Earned Leave': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      'Unpaid Leave': 'bg-amber-100 text-amber-800 border-amber-200',
+      'Comp Off': 'bg-purple-100 text-purple-800 border-purple-200',
+    };
+    return colors[type] || 'bg-slate-100 text-slate-800 border-slate-200';
   };
 
   const formatDates = (dates) => {
@@ -221,7 +468,6 @@ const LeavesPage = () => {
       return `${format(sortedDates[0], 'MMM dd')} & ${format(sortedDates[1], 'MMM dd, yyyy')}`;
     }
 
-    // Check if consecutive
     let isConsecutive = true;
     for (let i = 1; i < sortedDates.length; i++) {
       const diff = differenceInDays(sortedDates[i], sortedDates[i - 1]);
@@ -235,7 +481,6 @@ const LeavesPage = () => {
       return `${format(sortedDates[0], 'MMM dd')} - ${format(sortedDates[sortedDates.length - 1], 'MMM dd, yyyy')}`;
     }
 
-    // Non-consecutive dates
     if (sortedDates.length <= 3) {
       return sortedDates.map(d => format(d, 'MMM dd')).join(', ');
     }
@@ -246,6 +491,34 @@ const LeavesPage = () => {
   const getAvailableBalance = (leaveType) => {
     const key = leaveType.toLowerCase().replace(/ /g, '_');
     return leaveBalance[key] ?? 0;
+  };
+
+  const getLeaveTypeInfo = (leaveTypeName) => {
+    return leaveTypes.find(t => t.name === leaveTypeName) || {};
+  };
+
+  const getMinDate = () => {
+    // Use the minimum advance notice from default type or allow from today
+    return format(new Date(), 'yyyy-MM-dd');
+  };
+
+  // Calculate accrued balance for monthly-credited leaves
+  const calculateAccruedBalance = (monthlyCredit) => {
+    if (!joiningDate || !monthlyCredit) return 0;
+
+    const now = new Date();
+    const joining = new Date(joiningDate);
+
+    let months = (now.getFullYear() - joining.getFullYear()) * 12;
+    months += now.getMonth() - joining.getMonth();
+
+    if (now.getDate() < joining.getDate()) {
+      months--;
+    }
+
+    months = Math.max(0, months);
+
+    return Math.round(months * monthlyCredit * 10) / 10;
   };
 
   if (loading) {
@@ -262,7 +535,7 @@ const LeavesPage = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-bold text-slate-900 mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-            My Leaves
+            My Leavesaaaaaaaaaaaaaaaaaaa
           </h1>
           <p className="text-lg text-slate-600">Manage your leave applications</p>
         </div>
@@ -270,61 +543,17 @@ const LeavesPage = () => {
           <DialogTrigger asChild>
             <Button data-testid="apply-leave-btn" className="bg-slate-800 hover:bg-slate-900 rounded-full">
               <Plus className="w-4 h-4 mr-2" />
-              Apply Leave
+              Apply Leaveiiiiiii
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Apply for Leave</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-              <div>
-                <Label htmlFor="leave-type">Leave Type</Label>
-                <Select
-                  value={leaveForm.leave_type}
-                  onValueChange={(value) => setLeaveForm({ ...leaveForm, leave_type: value })}
-                >
-                  <SelectTrigger data-testid="leave-type-select" className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {leaveTypes.map(type => {
-                      const balance = getAvailableBalance(type.name);
-                      const isCompOff = type.name.toLowerCase().includes('comp');
-
-                      return (
-                        <SelectItem key={type.name} value={type.name}>
-                          <div className="flex items-center justify-between w-full">
-                            <span className="flex items-center gap-2">
-                              {isCompOff && <Gift className="w-4 h-4 text-purple-600" />}
-                              {type.name}
-                            </span>
-                            <span className="text-xs text-slate-500 ml-2">
-                              ({isCompOff ? balance : (type.quota > 0 ? `${balance}/${type.quota}` : 'Unlimited')})
-                            </span>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-
-                {/* Balance warning for Comp Off */}
-                {leaveForm.leave_type === 'Comp Off' && (
-                  <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <Gift className="w-4 h-4 text-purple-600" />
-                      <span className="text-sm text-purple-800">
-                        Available comp-off balance: <strong>{compOffBalance} days</strong>
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
               {/* Date Selection */}
               <div>
-                <Label>Select Dates</Label>
+                <Label>Select Date Range</Label>
                 <div className="grid grid-cols-2 gap-3 mt-2">
                   <div>
                     <Label className="text-xs text-slate-500">Start Date</Label>
@@ -333,6 +562,7 @@ const LeavesPage = () => {
                       data-testid="start-date-input"
                       type="date"
                       value={startDate}
+                      min={getMinDate()}
                       onChange={(e) => setStartDate(e.target.value)}
                       className="mt-1"
                     />
@@ -344,42 +574,229 @@ const LeavesPage = () => {
                       data-testid="end-date-input"
                       type="date"
                       value={endDate}
-                      min={startDate}
+                      min={startDate || getMinDate()}
                       onChange={(e) => setEndDate(e.target.value)}
                       className="mt-1"
                     />
                   </div>
                 </div>
-
-                {/* Selected dates preview */}
-                {leaveForm.dates.length > 0 && (
-                  <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                    <p className="text-xs text-slate-500 mb-2">
-                      Selected: {leaveForm.dates.length} day{leaveForm.dates.length !== 1 ? 's' : ''}
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {leaveForm.dates.slice(0, 7).map(date => (
-                        <Badge
-                          key={date}
-                          variant="outline"
-                          className="text-xs cursor-pointer hover:bg-slate-200 flex items-center gap-1"
-                          onClick={() => toggleDate(date)}
-                        >
-                          {format(new Date(date), 'MMM dd')}
-                          <X className="w-3 h-3" />
-                        </Badge>
-                      ))}
-                      {leaveForm.dates.length > 7 && (
-                        <Badge variant="outline" className="text-xs">
-                          +{leaveForm.dates.length - 7} more
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
 
-              {/* Half Day Option - only for single day */}
+              {/* Default Leave Type & Apply to All */}
+              {leaveForm.dates.length > 0 && (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1">
+                      <Label className="text-sm font-medium">Default Leave Type</Label>
+                      <Select
+                        value={defaultLeaveType}
+                        onValueChange={(value) => setDefaultLeaveType(value)}
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {leaveTypes.map(type => (
+                            <SelectItem key={type.name} value={type.name}>
+                              <span className="flex items-center gap-2">
+                                {type.name.toLowerCase().includes('comp') && <Gift className="w-4 h-4 text-purple-600" />}
+                                {type.name}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyLeaveTypeToAll(defaultLeaveType)}
+                      className="mt-6"
+                    >
+                      Apply to All Days
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Per-Day Leave Type Selection */}
+              {leaveForm.dates.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-sm font-medium">
+                      Leave Type per Day
+                      <span className="text-slate-400 font-normal ml-2">
+                        ({leaveForm.dates.length} day{leaveForm.dates.length !== 1 ? 's' : ''} selected)
+                      </span>
+                    </Label>
+                  </div>
+
+                  <div className="space-y-2 max-h-64 overflow-y-auto border border-slate-200 rounded-lg p-3 bg-white">
+                    {leaveForm.dates.map((dateStr, idx) => {
+                      const currentType = dateLeaveTypes[dateStr] || defaultLeaveType;
+                      const typeInfo = getLeaveTypeInfo(currentType);
+                      const balance = getAvailableBalance(currentType);
+
+                      return (
+                        <div
+                          key={dateStr}
+                          className={`flex items-center gap-3 p-2 rounded-lg border ${getLeaveTypeColor(currentType)} transition-all`}
+                        >
+                          <div className="flex-shrink-0 w-24">
+                            <p className="text-sm font-medium text-slate-900">
+                              {format(new Date(dateStr), 'EEE')}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {format(new Date(dateStr), 'MMM dd')}
+                            </p>
+                          </div>
+
+                          <div className="flex-1">
+                            <Select
+                              value={currentType}
+                              onValueChange={(value) => updateDateLeaveType(dateStr, value)}
+                            >
+                              <SelectTrigger className="h-9 bg-white">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {leaveTypes.map(type => {
+                                  const typeBalance = getAvailableBalance(type.name);
+                                  const isUnpaid = type.name.toLowerCase().includes('unpaid');
+
+                                  return (
+                                    <SelectItem key={type.name} value={type.name}>
+                                      <div className="flex items-center justify-between w-full">
+                                        <span className="flex items-center gap-2">
+                                          {type.name.toLowerCase().includes('comp') && (
+                                            <Gift className="w-3 h-3 text-purple-600" />
+                                          )}
+                                          {type.name}
+                                        </span>
+                                        <span className="text-xs text-slate-400 ml-2">
+                                          {isUnpaid ? '∞' : typeBalance}
+                                        </span>
+                                      </div>
+                                    </SelectItem>
+                                  );
+                                })}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                            onClick={() => toggleDate(dateStr)}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Balance Summary per Leave Type */}
+              {Object.keys(balanceUsage).length > 0 && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <Label className="text-sm font-medium text-blue-900 mb-2 block">
+                    Leave Balance Summary
+                  </Label>
+                  <div className="space-y-1.5">
+                    {Object.entries(balanceUsage).map(([type, info]) => {
+                      const isUnpaid = type.toLowerCase().includes('unpaid');
+                      const hasEnough = isUnpaid || info.sufficient;
+
+                      return (
+                        <div
+                          key={type}
+                          className={`flex items-center justify-between text-sm p-2 rounded ${hasEnough ? 'bg-white' : 'bg-red-50 border border-red-200'
+                            }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className={`text-xs ${getLeaveTypeBadgeColor(type)}`}>
+                              {type}
+                            </Badge>
+                            <span className="text-slate-600">
+                              {info.days} day{info.days !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          <div className={`text-xs ${hasEnough ? 'text-slate-500' : 'text-red-600 font-medium'}`}>
+                            {isUnpaid ? (
+                              'Unlimited'
+                            ) : hasEnough ? (
+                              `${info.available} available`
+                            ) : (
+                              `Only ${info.available} available!`
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Clubbing Validation Error */}
+              {!clubbingValidation.valid && (
+                <Alert variant="destructive" className="bg-red-50 border-red-200">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <AlertTitle className="text-red-800">Clubbing Not Allowed</AlertTitle>
+                  <AlertDescription className="text-red-700">
+                    <ul className="list-disc list-inside space-y-1 mt-1">
+                      {clubbingValidation.errors.map((error, idx) => (
+                        <li key={idx}>{error.message}</li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-sm">
+                      Please select different leave types or dates to resolve this conflict.
+                    </p>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Advance Notice Warnings */}
+              {advanceNoticeWarnings.length > 0 && (
+                <Alert className="bg-amber-50 border-amber-200">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertTitle className="text-amber-800">Advance Notice Warning</AlertTitle>
+                  <AlertDescription className="text-amber-700">
+                    <ul className="list-disc list-inside space-y-1 mt-1">
+                      {advanceNoticeWarnings.map((warning, idx) => (
+                        <li key={idx}>
+                          <strong>{warning.leaveType}</strong> requires {warning.required} days advance notice
+                          ({warning.dates.length} date{warning.dates.length > 1 ? 's' : ''} affected)
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-sm">You can still submit, but approval may be affected.</p>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Insufficient Balance Error */}
+              {insufficientBalanceTypes.length > 0 && (
+                <Alert variant="destructive" className="bg-red-50 border-red-200">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <AlertTitle className="text-red-800">Insufficient Balance</AlertTitle>
+                  <AlertDescription className="text-red-700">
+                    <ul className="list-disc list-inside space-y-1 mt-1">
+                      {insufficientBalanceTypes.map((item, idx) => (
+                        <li key={idx}>
+                          <strong>{item.type}</strong>: Available {item.available} days, Requested {item.requested} days
+                        </li>
+                      ))}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Half Day Option - Only for single date */}
               {leaveForm.dates.length === 1 && (
                 <div className="space-y-3">
                   <div className="flex items-center space-x-2">
@@ -414,30 +831,6 @@ const LeavesPage = () => {
                 </div>
               )}
 
-              {/* Balance Check Warning */}
-              {leaveForm.leave_type !== 'Unpaid Leave' && leaveForm.dates.length > 0 && (
-                (() => {
-                  const balance = getAvailableBalance(leaveForm.leave_type);
-                  const daysRequested = leaveForm.is_half_day && leaveForm.dates.length === 1
-                    ? 0.5
-                    : leaveForm.dates.length;
-
-                  if (balance < daysRequested) {
-                    return (
-                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                        <div className="flex items-center gap-2 text-red-700">
-                          <AlertCircle className="w-4 h-4" />
-                          <span className="text-sm">
-                            Insufficient balance! Available: {balance} days, Requested: {daysRequested} days
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()
-              )}
-
               <div>
                 <Label htmlFor="reason">Reason</Label>
                 <Textarea
@@ -466,12 +859,18 @@ const LeavesPage = () => {
                   Cancel
                 </Button>
                 <Button
+                  id="leave-submit-btn"
                   type="submit"
                   data-testid="submit-leave-btn"
                   className="flex-1 bg-slate-800 hover:bg-slate-900"
-                  disabled={submitting || leaveForm.dates.length === 0}
+                  disabled={
+                    submitting ||
+                    leaveForm.dates.length === 0 ||
+                    !clubbingValidation.valid ||
+                    insufficientBalanceTypes.length > 0
+                  }
                 >
-                  {submitting ? 'Submitting...' : 'Submit'}
+                  {submitting ? 'Submitting...' : `Submit${selectedLeaveTypes.length > 1 ? ` (${selectedLeaveTypes.length} types)` : ''}`}
                 </Button>
               </div>
             </form>
@@ -485,6 +884,12 @@ const LeavesPage = () => {
           const key = type.name.toLowerCase().replace(/ /g, '_');
           const balance = leaveBalance[key] ?? 0;
           const isCompOff = type.name.toLowerCase().includes('comp');
+          const isUnpaid = type.name.toLowerCase().includes('unpaid');
+          const isMonthly = type.credit_type === 'monthly';
+
+          const annualQuota = isMonthly && type.monthly_credit > 0
+            ? type.monthly_credit * 12
+            : type.quota;
 
           return (
             <Card key={type.name} className={`border ${getLeaveTypeColor(type.name)}`}>
@@ -495,15 +900,62 @@ const LeavesPage = () => {
                     {type.name}
                   </p>
                 </div>
-                <p className="text-2xl font-bold text-slate-900">{balance}</p>
-                <p className="text-xs text-slate-500">
-                  {isCompOff ? 'days available' : (type.quota > 0 ? `of ${type.quota} days` : 'days taken')}
+                <p className="text-2xl font-bold text-slate-900">
+                  {isUnpaid ? '∞' : balance}
                 </p>
+                <p className="text-xs text-slate-500">
+                  {isCompOff
+                    ? 'days available'
+                    : isUnpaid
+                      ? 'unlimited'
+                      : isMonthly
+                        ? `of ${annualQuota} days/year`
+                        : (type.quota > 0 ? `of ${type.quota} days/year` : 'days taken')
+                  }
+                </p>
+                {isMonthly && type.monthly_credit > 0 && (
+                  <Badge variant="outline" className="mt-2 text-xs bg-emerald-50 text-emerald-700 border-emerald-200">
+                    +{type.monthly_credit}/month
+                  </Badge>
+                )}
               </CardContent>
             </Card>
           );
         })}
       </div>
+
+      {/* Leave Policy Quick Info */}
+      <Card className="border-slate-100 shadow-sm bg-gradient-to-r from-blue-50 to-indigo-50">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-blue-600 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-blue-900 mb-2">Leave Policy Highlights</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-blue-800">
+                {leaveTypes.filter(t => !t.name.toLowerCase().includes('comp') && !t.name.toLowerCase().includes('unpaid')).slice(0, 3).map(type => (
+                  <div key={type.name}>
+                    <p className="font-medium">
+                      {type.name === 'Earned Leave' && '📅'}
+                      {type.name === 'Sick Leave' && '🏥'}
+                      {type.name === 'Casual Leave' && '🎯'}
+                      {' '}{type.name}
+                    </p>
+                    <p className="text-xs text-blue-600">
+                      {type.credit_type === 'monthly'
+                        ? `${type.monthly_credit} day/month`
+                        : `${type.quota} days/year`}
+                      {type.advance_days_required > 0 && ` • ${type.advance_days_required} days advance`}
+                      {type.clubbing_not_allowed_with?.length > 0 && (
+                        <span className="text-red-600"> • No club with {type.clubbing_not_allowed_with.join(', ')}</span>
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Leaves List */}
       <Card className="border-slate-100 shadow-sm">
@@ -556,7 +1008,7 @@ const LeavesPage = () => {
                             <span className="font-medium text-slate-700">{approval.approver_name}</span>
                             <span className="text-slate-500"> ({approval.approver_role}) </span>
                             <span className={approval.action === 'approve' ? 'text-emerald-600' : 'text-red-600'}>
-                              {approval.action === 'approve' ? 'approved' : 'rejected'}
+                              {approval.action === 'approve' ? 'approved' : approval.action === 'reject' ? 'rejected' : approval.action}
                             </span>
                             {approval.comments && (
                               <p className="text-slate-600 mt-1">Comment: {approval.comments}</p>

@@ -36,6 +36,7 @@ import AdminReimbursementsPage from './pages/AdminReimbursementPage';
 import MyCompOffPage from './pages/MyCompoffPage';
 import CompOffApprovalsPage from './pages/CompoffApprovalPage';
 import AdminCompOffPage from './pages/AdminCompoffPage';
+import LeaveBalanceManagement from './pages/LeaveBalanceManagement';
 
 
 const ProtectedRoute = ({ children }) => {
@@ -136,6 +137,7 @@ function App() {
             <Route path="/mycompoff" element={<MyCompOffPage />} />
             <Route path="/compoffapproval" element={<CompOffApprovalsPage />} />
             <Route path="/admincompoff" element={<AdminCompOffPage />} />
+            <Route path="/admin/leave-management" element={<LeaveBalanceManagement />} />
 
 
           </Route>
