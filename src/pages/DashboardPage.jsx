@@ -123,7 +123,7 @@ const DashboardPage = () => {
                   <FileText className="w-6 h-6 text-purple-600" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <p className="text-xs text-slate-500">Sick</p>
                   <p className="text-lg font-bold text-slate-900">{stats.my_leave_balance.sick_leave}</p>
@@ -133,8 +133,8 @@ const DashboardPage = () => {
                   <p className="text-lg font-bold text-slate-900">{stats.my_leave_balance.casual_leave}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">Paid</p>
-                  <p className="text-lg font-bold text-slate-900">{stats.my_leave_balance.paid_leave}</p>
+                  <p className="text-xs text-slate-500">Earned</p>
+                  <p className="text-lg font-bold text-slate-900">{stats.my_leave_balance.earned_leave}</p>
                 </div>
               </div>
             </CardContent>

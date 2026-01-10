@@ -134,7 +134,7 @@ const Layout = () => {
       <div className="hidden md:flex md:flex-col md:w-64 bg-white border-r border-slate-200">
         <div className="flex items-center h-16 px-6 border-b border-slate-200">
           <h1 className="text-2xl font-bold text-slate-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-            HRMS
+            XENOCIPHER
           </h1>
         </div>
 

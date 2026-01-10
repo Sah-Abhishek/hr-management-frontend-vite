@@ -724,9 +724,9 @@ const LeaveBalanceManagement = () => {
                 <li>• Sick Leave: <strong>+0.5 days</strong></li>
                 <li>• Earned Leave: <strong>+1 day</strong></li>
               </ul>
-              <p className="text-xs text-green-600 mt-2">
-                * January resets all balances (CL=6, SL=0.5, EL=0)
-              </p>
+              {/* <p className="text-xs text-green-600 mt-2"> */}
+              {/*   * January resets all balances (CL=6, SL=0.5, EL=0) */}
+              {/* </p> */}
             </div>
 
             <div className="flex gap-3 pt-2">
