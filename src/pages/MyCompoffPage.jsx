@@ -93,27 +93,27 @@ const MyCompOffPage = () => {
     switch (status) {
       case 'pending':
         return (
-          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 gap-1">
-            <Clock className="w-3 h-3" />
+          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 gap-1 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5">
+            <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
             Pending
           </Badge>
         );
       case 'approved':
         return (
-          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 gap-1">
-            <CheckCircle className="w-3 h-3" />
+          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 gap-1 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5">
+            <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
             Approved
           </Badge>
         );
       case 'rejected':
         return (
-          <Badge className="bg-red-100 text-red-700 hover:bg-red-100 gap-1">
-            <XCircle className="w-3 h-3" />
+          <Badge className="bg-red-100 text-red-700 hover:bg-red-100 gap-1 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5">
+            <XCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
             Rejected
           </Badge>
         );
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return <Badge variant="outline" className="text-[10px] sm:text-xs">{status}</Badge>;
     }
   };
 
@@ -149,88 +149,72 @@ const MyCompOffPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-3 sm:p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-gradient-to-br from-violet-600 to-purple-700 rounded-xl shadow-lg">
-              <Gift className="w-6 h-6 text-white" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-5 sm:mb-8">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-2 sm:p-3 bg-slate-800 rounded-lg sm:rounded-xl shadow-lg">
+              <Gift className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-slate-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
                 My Comp-Offs
               </h1>
-              <p className="text-slate-600">Request compensatory off for working on holidays</p>
+              <p className="text-xs sm:text-sm text-slate-600">Request compensatory off for working on holidays</p>
             </div>
           </div>
           <Button
             onClick={() => setShowRequestModal(true)}
-            className="bg-violet-600 hover:bg-violet-700 rounded-xl shadow-md gap-2"
+            className="bg-slate-800 hover:bg-slate-900 rounded-lg sm:rounded-xl shadow-md gap-1.5 sm:gap-2 text-xs sm:text-sm h-9 sm:h-10 w-full sm:w-auto"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             Request Comp-Off
           </Button>
         </div>
 
-        {/* Info Banner */}
-        {/* <div className="mb-6 bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-200 rounded-xl p-4 shadow-sm"> */}
-        {/*   <div className="flex gap-3 items-start"> */}
-        {/*     <div className="p-2 bg-violet-100 rounded-lg"> */}
-        {/*       <Info className="w-5 h-5 text-violet-600" /> */}
-        {/*     </div> */}
-        {/*     <div className="text-sm text-violet-900"> */}
-        {/*       <p className="font-semibold mb-1">About Comp-Off</p> */}
-        {/*       <p> */}
-        {/*         If you worked on a holiday, you can request a compensatory off. Once approved, */}
-        {/*         you can use it as a leave within <strong>90 days</strong> of the work date. */}
-        {/*       </p> */}
-        {/*     </div> */}
-        {/*   </div> */}
-        {/* </div> */}
-
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-5 sm:mb-8">
           <Card className="border-0 shadow-md bg-gradient-to-br from-emerald-50 to-green-50">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-emerald-600 font-medium">Available Balance</p>
-                  <p className="text-3xl font-bold text-emerald-700">{getAvailableCompOffs()}</p>
-                  <p className="text-xs text-emerald-600 mt-1">days to use</p>
+            <CardContent className="p-2.5 sm:p-4 md:p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="order-2 sm:order-1">
+                  <p className="text-[10px] sm:text-xs md:text-sm text-emerald-600 font-medium">Available</p>
+                  <p className="text-lg sm:text-2xl md:text-3xl font-bold text-emerald-700">{getAvailableCompOffs()}</p>
+                  <p className="text-[10px] sm:text-xs text-emerald-600">days to use</p>
                 </div>
-                <div className="p-3 bg-emerald-200 rounded-xl">
-                  <CheckCircle className="w-6 h-6 text-emerald-700" />
+                <div className="p-1.5 sm:p-2 md:p-3 bg-emerald-200 rounded-lg sm:rounded-xl order-1 sm:order-2 w-fit">
+                  <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 text-emerald-700" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card className="border-0 shadow-md bg-gradient-to-br from-amber-50 to-orange-50">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-amber-600 font-medium">Pending Requests</p>
-                  <p className="text-3xl font-bold text-amber-700">{getPendingCount()}</p>
-                  <p className="text-xs text-amber-600 mt-1">awaiting approval</p>
+            <CardContent className="p-2.5 sm:p-4 md:p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="order-2 sm:order-1">
+                  <p className="text-[10px] sm:text-xs md:text-sm text-amber-600 font-medium">Pending</p>
+                  <p className="text-lg sm:text-2xl md:text-3xl font-bold text-amber-700">{getPendingCount()}</p>
+                  <p className="text-[10px] sm:text-xs text-amber-600">awaiting</p>
                 </div>
-                <div className="p-3 bg-amber-200 rounded-xl">
-                  <Clock className="w-6 h-6 text-amber-700" />
+                <div className="p-1.5 sm:p-2 md:p-3 bg-amber-200 rounded-lg sm:rounded-xl order-1 sm:order-2 w-fit">
+                  <Clock className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 text-amber-700" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-0 shadow-md bg-gradient-to-br from-violet-50 to-purple-50">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-violet-600 font-medium">Total Earned</p>
-                  <p className="text-3xl font-bold text-violet-700">{getTotalEarned()}</p>
-                  <p className="text-xs text-violet-600 mt-1">days approved</p>
+          <Card className="border-0 shadow-md bg-gradient-to-br from-blue-50 to-indigo-50">
+            <CardContent className="p-2.5 sm:p-4 md:p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="order-2 sm:order-1">
+                  <p className="text-[10px] sm:text-xs md:text-sm text-blue-600 font-medium">Earned</p>
+                  <p className="text-lg sm:text-2xl md:text-3xl font-bold text-blue-700">{getTotalEarned()}</p>
+                  <p className="text-[10px] sm:text-xs text-blue-600">approved</p>
                 </div>
-                <div className="p-3 bg-violet-200 rounded-xl">
-                  <Gift className="w-6 h-6 text-violet-700" />
+                <div className="p-1.5 sm:p-2 md:p-3 bg-blue-200 rounded-lg sm:rounded-xl order-1 sm:order-2 w-fit">
+                  <Gift className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 text-blue-700" />
                 </div>
               </div>
             </CardContent>
@@ -239,51 +223,51 @@ const MyCompOffPage = () => {
 
         {/* Comp-Off List */}
         <Card className="border-0 shadow-md">
-          <CardHeader className="border-b border-slate-100">
-            <CardTitle className="text-xl flex items-center gap-2">
-              <CalendarDays className="w-5 h-5 text-slate-600" />
+          <CardHeader className="border-b border-slate-100 p-3 sm:p-6">
+            <CardTitle className="text-base sm:text-lg md:text-xl flex items-center gap-1.5 sm:gap-2">
+              <CalendarDays className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" />
               Comp-Off History
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             {loading ? (
-              <div className="text-center py-16">
-                <div className="animate-spin w-10 h-10 border-4 border-slate-200 border-t-violet-600 rounded-full mx-auto mb-4"></div>
-                <p className="text-slate-500">Loading comp-offs...</p>
+              <div className="text-center py-10 sm:py-16">
+                <div className="animate-spin w-8 h-8 sm:w-10 sm:h-10 border-4 border-slate-200 border-t-slate-800 rounded-full mx-auto mb-3 sm:mb-4"></div>
+                <p className="text-xs sm:text-sm text-slate-500">Loading comp-offs...</p>
               </div>
             ) : compOffs.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Gift className="w-10 h-10 text-slate-300" />
+              <div className="text-center py-10 sm:py-16">
+                <div className="w-14 h-14 sm:w-20 sm:h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                  <Gift className="w-7 h-7 sm:w-10 sm:h-10 text-slate-300" />
                 </div>
-                <h3 className="text-lg font-semibold text-slate-700 mb-2">No Comp-Off Requests</h3>
-                <p className="text-slate-500 mb-6">You haven't requested any comp-offs yet</p>
+                <h3 className="text-sm sm:text-lg font-semibold text-slate-700 mb-1.5 sm:mb-2">No Comp-Off Requests</h3>
+                <p className="text-xs sm:text-sm text-slate-500 mb-4 sm:mb-6">You haven't requested any comp-offs yet</p>
                 <Button
                   onClick={() => setShowRequestModal(true)}
-                  className="bg-violet-600 hover:bg-violet-700"
+                  className="bg-slate-800 hover:bg-slate-900 text-xs sm:text-sm h-9 sm:h-10"
                 >
-                  <Plus className="w-4 h-4 mr-2" />
+                  <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                   Request Comp-Off
                 </Button>
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
                 {compOffs.map((compOff) => (
-                  <div key={compOff.id} className="p-5 hover:bg-slate-50 transition-colors">
-                    <div className="flex items-start justify-between">
-                      <div className="flex gap-4">
-                        <div className="p-3 bg-violet-100 rounded-xl">
-                          <Calendar className="w-6 h-6 text-violet-600" />
+                  <div key={compOff.id} className="p-3 sm:p-5 hover:bg-slate-50 transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4">
+                      <div className="flex gap-2.5 sm:gap-4 flex-1 min-w-0">
+                        <div className="p-2 sm:p-3 bg-slate-100 rounded-lg sm:rounded-xl shrink-0">
+                          <Calendar className="w-4 h-4 sm:w-6 sm:h-6 text-slate-600" />
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-semibold text-slate-800">
-                              Worked on {format(new Date(compOff.work_date), 'EEEE, MMM dd, yyyy')}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
+                            <h3 className="font-semibold text-slate-800 text-sm sm:text-base">
+                              {format(new Date(compOff.work_date), 'MMM dd, yyyy')}
                             </h3>
                             {getStatusBadge(compOff.status)}
                           </div>
-                          <p className="text-sm text-slate-500 mb-2">{compOff.reason}</p>
-                          <div className="flex items-center gap-4 text-sm">
+                          <p className="text-[11px] sm:text-sm text-slate-500 mb-1.5 sm:mb-2 line-clamp-2">{compOff.reason}</p>
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-sm">
                             <span className="text-slate-500">
                               Requested: {format(new Date(compOff.created_at), 'MMM dd, yyyy')}
                             </span>
@@ -294,21 +278,23 @@ const MyCompOffPage = () => {
                             )}
                           </div>
                           {compOff.remarks && (
-                            <div className="mt-2 p-2 bg-slate-100 rounded-lg">
-                              <p className="text-xs text-slate-600">
+                            <div className="mt-1.5 sm:mt-2 p-1.5 sm:p-2 bg-slate-100 rounded-lg">
+                              <p className="text-[10px] sm:text-xs text-slate-600">
                                 <span className="font-medium">Remarks:</span> {compOff.remarks}
                               </p>
                             </div>
                           )}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-violet-700">{compOff.days}</p>
-                        <p className="text-xs text-slate-500">day{compOff.days !== 1 ? 's' : ''}</p>
+                      <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 sm:gap-0 shrink-0">
+                        <div className="flex items-center sm:block gap-2 sm:text-right">
+                          <p className="text-lg sm:text-2xl font-bold text-slate-700">{compOff.days}</p>
+                          <p className="text-[10px] sm:text-xs text-slate-500">day{compOff.days !== 1 ? 's' : ''}</p>
+                        </div>
                         {compOff.status === 'approved' && (
-                          <div className="mt-2">
-                            <p className="text-xs text-slate-500">Remaining</p>
-                            <p className="text-lg font-semibold text-emerald-600">{compOff.remaining_days || compOff.days}</p>
+                          <div className="text-right">
+                            <p className="text-[10px] sm:text-xs text-slate-500">Remaining</p>
+                            <p className="text-base sm:text-lg font-semibold text-emerald-600">{compOff.remaining_days || compOff.days}</p>
                           </div>
                         )}
                       </div>
@@ -322,32 +308,32 @@ const MyCompOffPage = () => {
 
         {/* Request Comp-Off Modal */}
         <Dialog open={showRequestModal} onOpenChange={setShowRequestModal}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto mx-2 sm:mx-auto">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Gift className="w-5 h-5 text-violet-600" />
+              <DialogTitle className="flex items-center gap-1.5 sm:gap-2 text-base sm:text-lg">
+                <Gift className="w-4 h-4 sm:w-5 sm:h-5 text-slate-700" />
                 Request Comp-Off
               </DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
+            <div className="space-y-3 sm:space-y-4 py-3 sm:py-4">
               {/* Work Date */}
               <div>
-                <Label className="text-slate-700 font-medium">Date You Worked *</Label>
+                <Label className="text-slate-700 font-medium text-xs sm:text-sm">Date You Worked *</Label>
                 <Input
                   type="date"
                   value={formData.work_date}
                   onChange={(e) => setFormData({ ...formData, work_date: e.target.value })}
                   max={format(new Date(), 'yyyy-MM-dd')}
-                  className="mt-1.5"
+                  className="mt-1 sm:mt-1.5 text-sm h-9 sm:h-10"
                 />
                 {formData.work_date && isHoliday(formData.work_date) && (
-                  <p className="text-xs text-emerald-600 mt-1">
+                  <p className="text-[10px] sm:text-xs text-emerald-600 mt-1">
                     ✓ This was a holiday: {getHolidayName(formData.work_date)}
                   </p>
                 )}
                 {formData.work_date && !isHoliday(formData.work_date) && (
-                  <p className="text-xs text-amber-600 mt-1">
+                  <p className="text-[10px] sm:text-xs text-amber-600 mt-1">
                     ⚠ This date is not marked as a holiday in the system
                   </p>
                 )}
@@ -355,66 +341,59 @@ const MyCompOffPage = () => {
 
               {/* Days */}
               <div>
-                <Label className="text-slate-700 font-medium">Comp-Off Days *</Label>
-                <div className="flex gap-3 mt-1.5">
+                <Label className="text-slate-700 font-medium text-xs sm:text-sm">Comp-Off Days *</Label>
+                <div className="flex gap-2 sm:gap-3 mt-1 sm:mt-1.5">
                   <Button
                     type="button"
                     variant={formData.days === '0.5' ? 'default' : 'outline'}
-                    className={formData.days === '0.5' ? 'bg-violet-600 hover:bg-violet-700' : ''}
+                    className={`flex-1 text-xs sm:text-sm h-9 sm:h-10 ${formData.days === '0.5' ? 'bg-slate-800 hover:bg-slate-900' : ''}`}
                     onClick={() => setFormData({ ...formData, days: '0.5' })}
                   >
-                    Half Day (0.5)
+                    Half Day
                   </Button>
                   <Button
                     type="button"
                     variant={formData.days === '1' ? 'default' : 'outline'}
-                    className={formData.days === '1' ? 'bg-violet-600 hover:bg-violet-700' : ''}
+                    className={`flex-1 text-xs sm:text-sm h-9 sm:h-10 ${formData.days === '1' ? 'bg-slate-800 hover:bg-slate-900' : ''}`}
                     onClick={() => setFormData({ ...formData, days: '1' })}
                   >
-                    Full Day (1)
+                    Full Day
                   </Button>
                 </div>
               </div>
 
               {/* Reason */}
               <div>
-                <Label className="text-slate-700 font-medium">Reason *</Label>
+                <Label className="text-slate-700 font-medium text-xs sm:text-sm">Reason *</Label>
                 <Textarea
                   placeholder="Describe why you worked on this holiday..."
                   value={formData.reason}
                   onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                  className="mt-1.5"
+                  className="mt-1 sm:mt-1.5 text-xs sm:text-sm"
                   rows={3}
                 />
               </div>
-
-              {/* Info */}
-              {/* <div className="p-3 bg-violet-50 rounded-lg border border-violet-100"> */}
-              {/*   <p className="text-xs text-violet-700"> */}
-              {/*     <strong>Note:</strong> Your request will be sent to your manager for approval. */}
-              {/*     Once approved, you can use this comp-off within 90 days. */}
-              {/*   </p> */}
-              {/* </div> */}
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="gap-2 sm:gap-0">
               <Button
                 variant="outline"
                 onClick={() => {
                   setShowRequestModal(false);
                   resetForm();
                 }}
+                className="text-xs sm:text-sm h-8 sm:h-10"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="bg-violet-600 hover:bg-violet-700"
+                className="bg-slate-800 hover:bg-slate-900 text-xs sm:text-sm h-8 sm:h-10"
               >
                 {submitting ? (
                   <>
-                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                    <div className="animate-spin w-3 h-3 sm:w-4 sm:h-4 border-2 border-white border-t-transparent rounded-full mr-1.5 sm:mr-2"></div>
                     Submitting...
                   </>
                 ) : (

@@ -14,6 +14,23 @@ const Layout = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const { user } = getAuth();
 
+  // Close sidebar on route change
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
+  // Prevent body scroll when sidebar is open
+  useEffect(() => {
+    if (sidebarOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [sidebarOpen]);
+
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
@@ -187,93 +204,110 @@ const Layout = () => {
         </div>
       </div>
 
-      {/* Mobile Sidebar */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
-          <div
-            className="fixed inset-0 bg-slate-900/50"
-            onClick={() => setSidebarOpen(false)}
-          />
-          <div className="fixed inset-y-0 left-0 w-64 bg-white">
-            <div className="flex items-center justify-between h-16 px-6 border-b border-slate-200">
-              <h1 className="text-2xl font-bold text-slate-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-                HRMS
-              </h1>
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="text-slate-500 hover:text-slate-900"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
+      {/* Mobile Sidebar with Animation */}
+      <div
+        className={`fixed inset-0 z-40 md:hidden transition-opacity duration-300 ease-in-out ${sidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          }`}
+      >
+        {/* Overlay with fade animation */}
+        <div
+          className={`fixed inset-0 bg-slate-900/50 transition-opacity duration-300 ease-in-out ${sidebarOpen ? 'opacity-100' : 'opacity-0'
+            }`}
+          onClick={() => setSidebarOpen(false)}
+        />
 
-            {/* Mobile User Info at Top */}
-            <div className="px-4 py-4 border-b border-slate-100">
-              <Link
-                to="/profile"
-                onClick={() => setSidebarOpen(false)}
-                className="flex items-center p-2 -mx-2 rounded-lg hover:bg-slate-50 transition-colors"
-              >
-                <UserAvatar size="md" />
-                <div className="ml-3 flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900 truncate">
-                    {displayName}
-                  </p>
-                  <p className="text-xs text-slate-500 truncate capitalize">{user?.role}</p>
-                </div>
-              </Link>
-            </div>
+        {/* Sidebar panel with slide animation */}
+        <div
+          className={`fixed inset-y-0 left-0 w-72 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between h-16 px-4 border-b border-slate-200">
+            <h1 className="text-xl font-bold text-slate-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+              HRMS
+            </h1>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
 
-            <nav className="px-4 py-4 space-y-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
-              {filteredNavigation.map((item) => {
-                const Icon = item.icon;
-                const active = isActive(item.href);
-                return (
-                  <Link
-                    key={item.name}
-                    to={item.href}
-                    onClick={() => setSidebarOpen(false)}
-                    className={`
-                      flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all
-                      ${active
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                      }
-                    `}
-                  >
-                    <Icon className="w-5 h-5 mr-3" />
-                    {item.name}
-                  </Link>
-                );
-              })}
-            </nav>
+          {/* Mobile User Info at Top */}
+          <div className="px-4 py-4 border-b border-slate-100">
+            <Link
+              to="/profile"
+              onClick={() => setSidebarOpen(false)}
+              className="flex items-center p-2 -mx-2 rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              <UserAvatar size="md" />
+              <div className="ml-3 flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-900 truncate">
+                  {displayName}
+                </p>
+                <p className="text-xs text-slate-500 truncate capitalize">{user?.role}</p>
+              </div>
+            </Link>
+          </div>
 
-            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200 bg-white">
-              <Button
-                onClick={handleLogout}
-                variant="ghost"
-                className="w-full justify-start text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Logout
-              </Button>
-            </div>
+          {/* Navigation with staggered animation */}
+          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 220px)' }}>
+            {filteredNavigation.map((item, index) => {
+              const Icon = item.icon;
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  onClick={() => setSidebarOpen(false)}
+                  className={`
+                    flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all
+                    ${active
+                      ? 'bg-slate-100 text-slate-900'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    }
+                  `}
+                  style={{
+                    transitionDelay: sidebarOpen ? `${index * 20}ms` : '0ms',
+                    opacity: sidebarOpen ? 1 : 0,
+                    transform: sidebarOpen ? 'translateX(0)' : 'translateX(-10px)',
+                    transition: 'opacity 200ms ease-out, transform 200ms ease-out, background-color 150ms',
+                  }}
+                >
+                  <Icon className="w-5 h-5 mr-3 flex-shrink-0" />
+                  <span className="truncate">{item.name}</span>
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* Logout Button */}
+          <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200 bg-white">
+            <Button
+              onClick={handleLogout}
+              variant="ghost"
+              className="w-full justify-start text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Main Content */}
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Mobile Header */}
-        <div className="md:hidden flex items-center justify-between h-16 px-4 bg-white border-b border-slate-200">
+        <div className="md:hidden flex items-center justify-between h-14 px-4 bg-white border-b border-slate-200">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="text-slate-500 hover:text-slate-900"
+            className="p-2 -ml-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
             data-testid="mobile-menu-btn"
           >
-            <Menu className="w-6 h-6" />
+            <Menu className="w-5 h-5" />
           </button>
-          <h1 className="text-xl font-bold text-slate-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+          <h1 className="text-lg font-bold text-slate-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
             HRMS
           </h1>
           {/* Mobile header avatar */}

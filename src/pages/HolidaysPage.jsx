@@ -328,6 +328,11 @@ const HolidaysPage = () => {
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
+  const monthNamesShort = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+
   const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   // Render a single month calendar
@@ -340,7 +345,7 @@ const HolidaysPage = () => {
     // Empty cells before first day
     for (let i = 0; i < startingDay; i++) {
       days.push(
-        <div key={`empty-${monthIndex}-${i}`} className="h-7 w-7"></div>
+        <div key={`empty-${monthIndex}-${i}`} className="h-6 w-6 sm:h-7 sm:w-7"></div>
       );
     }
 
@@ -361,7 +366,7 @@ const HolidaysPage = () => {
           key={`${monthIndex}-${day}`}
           onClick={() => handleDateClick(dateKey, isPast)}
           className={`
-            h-7 w-7 flex items-center justify-center text-xs rounded-md transition-all relative
+            h-6 w-6 sm:h-7 sm:w-7 flex items-center justify-center text-[10px] sm:text-xs rounded-md transition-all relative
             ${isToday ? 'ring-2 ring-blue-400' : ''}
             ${holiday ? `${typeColor.bg} ${typeColor.text} font-medium` : ''}
             ${isPast && !holiday ? 'text-slate-300' : !holiday ? 'text-slate-700' : ''}
@@ -380,18 +385,19 @@ const HolidaysPage = () => {
 
     return (
       <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="py-2 px-3 bg-slate-50 border-b">
-          <CardTitle className="text-sm font-semibold text-slate-700">
-            {monthNames[monthIndex]}
+        <CardHeader className="py-1.5 sm:py-2 px-2 sm:px-3 bg-slate-50 border-b">
+          <CardTitle className="text-xs sm:text-sm font-semibold text-slate-700">
+            <span className="sm:hidden">{monthNamesShort[monthIndex]}</span>
+            <span className="hidden sm:inline">{monthNames[monthIndex]}</span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-2">
+        <CardContent className="p-1.5 sm:p-2">
           {/* Day headers */}
-          <div className="grid grid-cols-7 gap-1 mb-1">
+          <div className="grid grid-cols-7 gap-0.5 sm:gap-1 mb-0.5 sm:mb-1">
             {dayNames.map((day, idx) => (
               <div
                 key={idx}
-                className={`h-6 w-7 flex items-center justify-center text-xs font-medium 
+                className={`h-5 sm:h-6 w-6 sm:w-7 flex items-center justify-center text-[10px] sm:text-xs font-medium 
                   ${idx === 0 || idx === 6 ? 'text-slate-400' : 'text-slate-600'}`}
               >
                 {day}
@@ -399,7 +405,7 @@ const HolidaysPage = () => {
             ))}
           </div>
           {/* Calendar grid */}
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
             {days}
           </div>
         </CardContent>
@@ -415,11 +421,12 @@ const HolidaysPage = () => {
     today.setHours(0, 0, 0, 0);
 
     const fullDayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const shortDayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
     // Empty cells before first day
     for (let i = 0; i < startingDay; i++) {
       days.push(
-        <div key={`empty-${i}`} className="h-24 md:h-28 bg-slate-50 border border-slate-100"></div>
+        <div key={`empty-${i}`} className="h-16 sm:h-24 md:h-28 bg-slate-50 border border-slate-100"></div>
       );
     }
 
@@ -442,7 +449,7 @@ const HolidaysPage = () => {
           key={day}
           onClick={() => handleDateClick(dateKey, isPast)}
           className={`
-            h-24 md:h-28 border border-slate-100 p-2 transition-all relative
+            h-16 sm:h-24 md:h-28 border border-slate-100 p-1 sm:p-2 transition-all relative
             ${isToday ? 'ring-2 ring-blue-400 ring-inset' : ''}
             ${isWeekend && !holiday ? 'bg-slate-50' : 'bg-white'}
             ${holiday ? `${typeColor.bg} ${typeColor.border} border-2` : ''}
@@ -452,16 +459,16 @@ const HolidaysPage = () => {
             ${isRecurring ? 'opacity-50' : ''}
           `}
         >
-          <div className={`text-sm font-medium ${isToday ? 'text-blue-600' : isPast ? 'text-slate-400' : isWeekend ? 'text-slate-400' : 'text-slate-700'}`}>
+          <div className={`text-xs sm:text-sm font-medium ${isToday ? 'text-blue-600' : isPast ? 'text-slate-400' : isWeekend ? 'text-slate-400' : 'text-slate-700'}`}>
             {day}
           </div>
           {holiday && (
-            <div className="mt-1">
-              <p className={`text-xs font-medium ${typeColor.text} truncate`}>
+            <div className="mt-0.5 sm:mt-1">
+              <p className={`text-[10px] sm:text-xs font-medium ${typeColor.text} truncate`}>
                 {holiday.name}
               </p>
               {isRecurring && (
-                <Repeat className="w-3 h-3 text-slate-400 mt-1" />
+                <Repeat className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-400 mt-0.5 sm:mt-1" />
               )}
             </div>
           )}
@@ -476,10 +483,11 @@ const HolidaysPage = () => {
           {fullDayNames.map((day, idx) => (
             <div
               key={day}
-              className={`p-2 text-center text-sm font-semibold 
+              className={`p-1.5 sm:p-2 text-center text-[10px] sm:text-sm font-semibold 
                 ${idx === 0 || idx === 6 ? 'text-slate-400 bg-slate-50' : 'text-slate-700 bg-white'}`}
             >
-              {day}
+              <span className="sm:hidden">{shortDayNames[idx]}</span>
+              <span className="hidden sm:inline">{day}</span>
             </div>
           ))}
         </div>
@@ -513,75 +521,88 @@ const HolidaysPage = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-slate-500">Loading...</div>
+        <div className="text-slate-500 text-sm sm:text-base">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 md:p-10 space-y-6">
+    <div className="p-3 sm:p-6 md:p-10 space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:gap-4">
         <div>
-          <h1 className="text-4xl font-bold text-slate-900 mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 mb-1 sm:mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>
             Holidays
           </h1>
-          <p className="text-lg text-slate-600">
+          <p className="text-sm sm:text-base md:text-lg text-slate-600">
             {isAdmin ? 'Manage company holidays' : 'View company holidays'}
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Controls Row */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {/* View Toggle */}
-          <div className="flex items-center bg-slate-100 rounded-lg p-1">
+          <div className="flex items-center bg-slate-100 rounded-lg p-0.5 sm:p-1">
             <Button
-              variant={viewMode === 'month' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => setViewMode('month')}
-              className={`gap-1 ${viewMode === 'month' ? 'bg-white shadow-sm' : ''}`}
+              className={`
+      gap-1 text-xs sm:text-sm h-7 sm:h-8 px-2 sm:px-3
+      transition-colors
+      ${viewMode === 'month'
+                  ? 'bg-white text-black shadow-sm hover:bg-white'
+                  : 'bg-transparent text-slate-600 hover:bg-slate-200'}
+    `}
             >
-              <CalendarRange className="w-4 h-4" />
-              Month
+              <CalendarRange className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">Month</span>
             </Button>
+
             <Button
-              variant={viewMode === 'year' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => setViewMode('year')}
-              className={`gap-1 ${viewMode === 'year' ? 'bg-white shadow-sm' : ''}`}
+              className={`
+      gap-1 text-xs sm:text-sm h-7 sm:h-8 px-2 sm:px-3
+      transition-colors
+      ${viewMode === 'year'
+                  ? 'bg-white text-black shadow-sm hover:bg-white'
+                  : 'bg-transparent text-slate-600 hover:bg-slate-200'}
+    `}
             >
-              <Grid3X3 className="w-4 h-4" />
-              Year
+              <Grid3X3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">Year</span>
             </Button>
           </div>
 
           {/* Navigation */}
           {viewMode === 'year' ? (
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1">
-              <Button variant="ghost" size="icon" onClick={goToPreviousYear} className="h-8 w-8">
-                <ChevronLeft className="w-4 h-4" />
+            <div className="flex items-center gap-1 sm:gap-2 bg-white border border-slate-200 rounded-lg px-1.5 sm:px-2 py-0.5 sm:py-1">
+              <Button variant="ghost" size="icon" onClick={goToPreviousYear} className="h-7 w-7 sm:h-8 sm:w-8">
+                <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </Button>
-              <span className="text-lg font-semibold text-slate-900 min-w-[60px] text-center">
+              <span className="text-sm sm:text-lg font-semibold text-slate-900 min-w-[50px] sm:min-w-[60px] text-center">
                 {currentYear}
               </span>
-              <Button variant="ghost" size="icon" onClick={goToNextYear} className="h-8 w-8">
-                <ChevronRight className="w-4 h-4" />
+              <Button variant="ghost" size="icon" onClick={goToNextYear} className="h-7 w-7 sm:h-8 sm:w-8">
+                <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </Button>
-              <Button variant="ghost" size="sm" onClick={goToCurrentYear} className="text-xs">
+              <Button variant="ghost" size="sm" onClick={goToCurrentYear} className="text-[10px] sm:text-xs h-6 sm:h-7 px-1.5 sm:px-2">
                 Today
               </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1">
-              <Button variant="ghost" size="icon" onClick={goToPreviousMonth} className="h-8 w-8">
-                <ChevronLeft className="w-4 h-4" />
+            <div className="flex items-center gap-1 sm:gap-2 bg-white border border-slate-200 rounded-lg px-1.5 sm:px-2 py-0.5 sm:py-1">
+              <Button variant="ghost" size="icon" onClick={goToPreviousMonth} className="h-7 w-7 sm:h-8 sm:w-8">
+                <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </Button>
-              <span className="text-lg font-semibold text-slate-900 min-w-[140px] text-center">
-                {monthNames[currentMonth]} {currentYear}
+              <span className="text-xs sm:text-lg font-semibold text-slate-900 min-w-[80px] sm:min-w-[140px] text-center">
+                <span className="sm:hidden">{monthNamesShort[currentMonth]} {currentYear}</span>
+                <span className="hidden sm:inline">{monthNames[currentMonth]} {currentYear}</span>
               </span>
-              <Button variant="ghost" size="icon" onClick={goToNextMonth} className="h-8 w-8">
-                <ChevronRight className="w-4 h-4" />
+              <Button variant="ghost" size="icon" onClick={goToNextMonth} className="h-7 w-7 sm:h-8 sm:w-8">
+                <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </Button>
-              <Button variant="ghost" size="sm" onClick={goToToday} className="text-xs">
+              <Button variant="ghost" size="sm" onClick={goToToday} className="text-[10px] sm:text-xs h-6 sm:h-7 px-1.5 sm:px-2">
                 Today
               </Button>
             </div>
@@ -590,45 +611,46 @@ const HolidaysPage = () => {
           {isAdmin && (
             <Button
               onClick={() => setRecurringDialogOpen(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full gap-2"
+              className="bg-slate-800 hover:bg-slate-900 text-white rounded-lg sm:rounded-full gap-1 sm:gap-2 text-xs sm:text-sm h-8 sm:h-9 px-2.5 sm:px-4 ml-auto"
             >
-              <Repeat className="w-4 h-4" />
-              Add Recurring
+              <Repeat className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Add Recurring</span>
+              <span className="sm:hidden">Recurring</span>
             </Button>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 sm:gap-6">
         {/* Calendar Section */}
         <div className="xl:col-span-3">
           <Card className="border-slate-100 shadow-sm">
-            <CardHeader className="border-b border-slate-100 bg-slate-50 py-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+            <CardHeader className="border-b border-slate-100 bg-slate-50 py-2 sm:py-3 px-3 sm:px-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2">
                   {viewMode === 'year' ? (
-                    <Grid3X3 className="w-5 h-5 text-slate-600" />
+                    <Grid3X3 className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" />
                   ) : (
-                    <CalendarRange className="w-5 h-5 text-slate-600" />
+                    <CalendarRange className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" />
                   )}
-                  <h2 className="text-xl font-semibold text-slate-900">
+                  <h2 className="text-base sm:text-lg md:text-xl font-semibold text-slate-900">
                     {viewMode === 'year'
                       ? `${currentYear} Calendar`
                       : `${monthNames[currentMonth]} ${currentYear}`
                     }
                   </h2>
                 </div>
-                <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-sm">
                   <span className="text-slate-500">
-                    {stats.total} holidays • {stats.recurring} recurring (grayed)
+                    {stats.total} holidays • {stats.recurring} recurring
                   </span>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className={viewMode === 'year' ? 'p-4' : 'p-0'}>
+            <CardContent className={viewMode === 'year' ? 'p-2 sm:p-4' : 'p-0'}>
               {viewMode === 'year' ? (
                 /* 12 Month Grid - Year View */
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
                   {monthNames.map((_, monthIndex) => (
                     <div key={monthIndex}>
                       {renderMonthCalendar(monthIndex)}
@@ -643,29 +665,29 @@ const HolidaysPage = () => {
           </Card>
 
           {/* Legend */}
-          <Card className="border-slate-100 shadow-sm mt-4">
-            <CardContent className="py-4">
-              <div className="flex flex-wrap items-center gap-6">
-                <span className="text-sm font-medium text-slate-600">Legend:</span>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded bg-red-100 border-2 border-red-400"></div>
-                  <span className="text-sm text-slate-600">Public Holiday</span>
+          <Card className="border-slate-100 shadow-sm mt-3 sm:mt-4">
+            <CardContent className="py-2.5 sm:py-4 px-3 sm:px-6">
+              <div className="flex flex-wrap items-center gap-3 sm:gap-6">
+                <span className="text-xs sm:text-sm font-medium text-slate-600">Legend:</span>
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-red-100 border-2 border-red-400"></div>
+                  <span className="text-[10px] sm:text-sm text-slate-600">Public</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded bg-amber-100 border-2 border-amber-400"></div>
-                  <span className="text-sm text-slate-600">Optional Holiday</span>
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-amber-100 border-2 border-amber-400"></div>
+                  <span className="text-[10px] sm:text-sm text-slate-600">Optional</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded bg-blue-100 border-2 border-blue-400"></div>
-                  <span className="text-sm text-slate-600">Restricted Holiday</span>
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-blue-100 border-2 border-blue-400"></div>
+                  <span className="text-[10px] sm:text-sm text-slate-600">Restricted</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded bg-slate-100 border-2 border-slate-300 opacity-50"></div>
-                  <span className="text-sm text-slate-600">Recurring (Grayed)</span>
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 rounded bg-slate-100 border-2 border-slate-300 opacity-50"></div>
+                  <span className="text-[10px] sm:text-sm text-slate-600">Recurring</span>
                 </div>
               </div>
               {isAdmin && (
-                <p className="text-xs text-slate-500 mt-3">
+                <p className="text-[10px] sm:text-xs text-slate-500 mt-2 sm:mt-3">
                   Click on any future date to add a holiday. Click on existing holidays to view or edit.
                 </p>
               )}
@@ -674,25 +696,25 @@ const HolidaysPage = () => {
         </div>
 
         {/* Sidebar */}
-        <div className="xl:col-span-1 space-y-4">
+        <div className="xl:col-span-1 space-y-3 sm:space-y-4">
           {/* Upcoming Holidays - Non-recurring only */}
           <Card className="border-slate-100 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                <CalendarDays className="w-5 h-5 text-emerald-600" />
+            <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6 pt-3 sm:pt-6">
+              <CardTitle className="text-sm sm:text-lg font-semibold text-slate-900 flex items-center gap-1.5 sm:gap-2">
+                <CalendarDays className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" />
                 Upcoming Holidays
               </CardTitle>
-              <p className="text-xs text-slate-500">Excludes recurring holidays</p>
+              <p className="text-[10px] sm:text-xs text-slate-500">Excludes recurring holidays</p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
               {upcomingHolidays.length > 0 ? (
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
                   {upcomingHolidays.map(holiday => {
                     const typeColor = getTypeColor(holiday.type, false);
                     return (
                       <div
                         key={holiday.id}
-                        className={`p-3 rounded-lg border-l-4 ${typeColor.bg} ${typeColor.border} cursor-pointer hover:shadow-sm transition-shadow`}
+                        className={`p-2 sm:p-3 rounded-lg border-l-4 ${typeColor.bg} ${typeColor.border} cursor-pointer hover:shadow-sm transition-shadow`}
                         onClick={() => {
                           setSelectedHoliday(holiday);
                           setHolidayForm({
@@ -703,11 +725,11 @@ const HolidaysPage = () => {
                           setViewDialogOpen(true);
                         }}
                       >
-                        <p className={`font-medium ${typeColor.text}`}>{holiday.name}</p>
-                        <p className="text-xs text-slate-600 mt-1">
-                          {format(new Date(holiday.date), 'EEEE, MMM dd, yyyy')}
+                        <p className={`font-medium text-xs sm:text-sm ${typeColor.text}`}>{holiday.name}</p>
+                        <p className="text-[10px] sm:text-xs text-slate-600 mt-0.5 sm:mt-1">
+                          {format(new Date(holiday.date), 'EEE, MMM dd, yyyy')}
                         </p>
-                        <Badge variant="outline" className="mt-2 text-xs capitalize">
+                        <Badge variant="outline" className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs capitalize px-1.5 sm:px-2">
                           {holiday.type}
                         </Badge>
                       </div>
@@ -715,9 +737,9 @@ const HolidaysPage = () => {
                   })}
                 </div>
               ) : (
-                <div className="text-center py-6 text-slate-500">
-                  <Calendar className="w-12 h-12 mx-auto mb-2 text-slate-300" />
-                  <p className="text-sm">No upcoming holidays</p>
+                <div className="text-center py-4 sm:py-6 text-slate-500">
+                  <Calendar className="w-8 h-8 sm:w-12 sm:h-12 mx-auto mb-1.5 sm:mb-2 text-slate-300" />
+                  <p className="text-xs sm:text-sm">No upcoming holidays</p>
                 </div>
               )}
             </CardContent>
@@ -725,34 +747,34 @@ const HolidaysPage = () => {
 
           {/* Stats Card - Non-recurring only */}
           <Card className="border-slate-100 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg font-semibold text-slate-900">
+            <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6 pt-3 sm:pt-6">
+              <CardTitle className="text-sm sm:text-lg font-semibold text-slate-900">
                 {currentYear} Summary
               </CardTitle>
-              <p className="text-xs text-slate-500">Excludes recurring holidays</p>
+              <p className="text-[10px] sm:text-xs text-slate-500">Excludes recurring holidays</p>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
+            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
+              <div className="space-y-2 sm:space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-600">Total Holidays</span>
-                  <span className="font-bold text-slate-900">{stats.total}</span>
+                  <span className="text-xs sm:text-sm text-slate-600">Total Holidays</span>
+                  <span className="font-bold text-slate-900 text-sm sm:text-base">{stats.total}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-600">Public</span>
-                  <span className="font-medium text-red-600">{stats.public}</span>
+                  <span className="text-xs sm:text-sm text-slate-600">Public</span>
+                  <span className="font-medium text-red-600 text-sm sm:text-base">{stats.public}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-600">Optional</span>
-                  <span className="font-medium text-amber-600">{stats.optional}</span>
+                  <span className="text-xs sm:text-sm text-slate-600">Optional</span>
+                  <span className="font-medium text-amber-600 text-sm sm:text-base">{stats.optional}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-600">Restricted</span>
-                  <span className="font-medium text-blue-600">{stats.restricted}</span>
+                  <span className="text-xs sm:text-sm text-slate-600">Restricted</span>
+                  <span className="font-medium text-blue-600 text-sm sm:text-base">{stats.restricted}</span>
                 </div>
-                <div className="pt-3 border-t border-slate-100">
+                <div className="pt-2 sm:pt-3 border-t border-slate-100">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-400">Recurring (grayed)</span>
-                    <span className="font-medium text-slate-400">{stats.recurring}</span>
+                    <span className="text-xs sm:text-sm text-slate-400">Recurring</span>
+                    <span className="font-medium text-slate-400 text-sm sm:text-base">{stats.recurring}</span>
                   </div>
                 </div>
               </div>
@@ -761,14 +783,14 @@ const HolidaysPage = () => {
 
           {/* All Holidays List for current year */}
           <Card className="border-slate-100 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg font-semibold text-slate-900">
+            <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6 pt-3 sm:pt-6">
+              <CardTitle className="text-sm sm:text-lg font-semibold text-slate-900">
                 All {currentYear} Holidays
               </CardTitle>
             </CardHeader>
-            <CardContent className="max-h-80 overflow-y-auto">
+            <CardContent className="max-h-60 sm:max-h-80 overflow-y-auto px-3 sm:px-6 pb-3 sm:pb-6">
               {nonRecurringHolidays.length > 0 ? (
-                <div className="space-y-2">
+                <div className="space-y-1.5 sm:space-y-2">
                   {nonRecurringHolidays
                     .sort((a, b) => a.date.localeCompare(b.date))
                     .map(holiday => {
@@ -776,7 +798,7 @@ const HolidaysPage = () => {
                       return (
                         <div
                           key={holiday.id}
-                          className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer"
+                          className="flex items-center justify-between p-1.5 sm:p-2 rounded-lg hover:bg-slate-50 cursor-pointer"
                           onClick={() => {
                             setSelectedHoliday(holiday);
                             setHolidayForm({
@@ -791,16 +813,16 @@ const HolidaysPage = () => {
                             }
                           }}
                         >
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${typeColor.dot}`}></div>
-                            <div>
-                              <p className="text-sm font-medium text-slate-800">{holiday.name}</p>
-                              <p className="text-xs text-slate-500">
+                          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                            <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0 ${typeColor.dot}`}></div>
+                            <div className="min-w-0">
+                              <p className="text-xs sm:text-sm font-medium text-slate-800 truncate">{holiday.name}</p>
+                              <p className="text-[10px] sm:text-xs text-slate-500">
                                 {format(new Date(holiday.date), 'MMM dd')}
                               </p>
                             </div>
                           </div>
-                          <Badge variant="outline" className="text-xs capitalize">
+                          <Badge variant="outline" className="text-[10px] sm:text-xs capitalize shrink-0 ml-1 px-1 sm:px-2">
                             {holiday.type}
                           </Badge>
                         </div>
@@ -808,8 +830,8 @@ const HolidaysPage = () => {
                     })}
                 </div>
               ) : (
-                <div className="text-center py-6 text-slate-500">
-                  <p className="text-sm">No holidays added yet</p>
+                <div className="text-center py-4 sm:py-6 text-slate-500">
+                  <p className="text-xs sm:text-sm">No holidays added yet</p>
                 </div>
               )}
             </CardContent>
@@ -819,64 +841,64 @@ const HolidaysPage = () => {
 
       {/* Add Holiday Dialog */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md mx-2 sm:mx-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Plus className="w-5 h-5" />
+            <DialogTitle className="flex items-center gap-1.5 sm:gap-2 text-base sm:text-lg">
+              <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
               Add Holiday
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div className="p-3 bg-slate-50 rounded-lg">
-              <p className="text-sm text-slate-600">Date</p>
-              <p className="font-semibold text-slate-900">
+          <div className="space-y-3 sm:space-y-4 mt-3 sm:mt-4">
+            <div className="p-2 sm:p-3 bg-slate-50 rounded-lg">
+              <p className="text-xs sm:text-sm text-slate-600">Date</p>
+              <p className="font-semibold text-slate-900 text-sm sm:text-base">
                 {selectedDate && format(new Date(selectedDate), 'EEEE, MMMM dd, yyyy')}
               </p>
             </div>
 
             <div>
-              <Label>Holiday Name *</Label>
+              <Label className="text-xs sm:text-sm">Holiday Name *</Label>
               <Input
                 placeholder="e.g., Diwali, Christmas"
                 value={holidayForm.name}
                 onChange={(e) => setHolidayForm({ ...holidayForm, name: e.target.value })}
-                className="mt-1"
+                className="mt-1 text-sm h-9 sm:h-10"
               />
             </div>
 
             <div>
-              <Label>Type</Label>
+              <Label className="text-xs sm:text-sm">Type</Label>
               <Select
                 value={holidayForm.type}
                 onValueChange={(value) => setHolidayForm({ ...holidayForm, type: value })}
               >
-                <SelectTrigger className="mt-1">
+                <SelectTrigger className="mt-1 text-xs sm:text-sm h-9 sm:h-10">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="public">Public Holiday</SelectItem>
-                  <SelectItem value="optional">Optional Holiday</SelectItem>
-                  <SelectItem value="restricted">Restricted Holiday</SelectItem>
+                  <SelectItem value="public" className="text-xs sm:text-sm">Public Holiday</SelectItem>
+                  <SelectItem value="optional" className="text-xs sm:text-sm">Optional Holiday</SelectItem>
+                  <SelectItem value="restricted" className="text-xs sm:text-sm">Restricted Holiday</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div>
-              <Label>Description (Optional)</Label>
+              <Label className="text-xs sm:text-sm">Description (Optional)</Label>
               <Textarea
                 placeholder="Add any notes about this holiday..."
                 value={holidayForm.description}
                 onChange={(e) => setHolidayForm({ ...holidayForm, description: e.target.value })}
                 rows={2}
-                className="mt-1"
+                className="mt-1 text-xs sm:text-sm"
               />
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <Button variant="outline" onClick={() => setAddDialogOpen(false)} className="flex-1">
+            <div className="flex gap-2 sm:gap-3 pt-2">
+              <Button variant="outline" onClick={() => setAddDialogOpen(false)} className="flex-1 text-xs sm:text-sm h-8 sm:h-10">
                 Cancel
               </Button>
-              <Button onClick={handleCreateHoliday} className="flex-1 bg-emerald-600 hover:bg-emerald-700">
+              <Button onClick={handleCreateHoliday} className="flex-1 bg-slate-800 hover:bg-slate-900 text-xs sm:text-sm h-8 sm:h-10">
                 Add Holiday
               </Button>
             </div>
@@ -886,77 +908,77 @@ const HolidaysPage = () => {
 
       {/* Edit Holiday Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md mx-2 sm:mx-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Edit2 className="w-5 h-5" />
+            <DialogTitle className="flex items-center gap-1.5 sm:gap-2 text-base sm:text-lg">
+              <Edit2 className="w-4 h-4 sm:w-5 sm:h-5" />
               Edit Holiday
             </DialogTitle>
           </DialogHeader>
           {selectedHoliday && (
-            <div className="space-y-4 mt-4">
-              <div className="p-3 bg-slate-50 rounded-lg">
-                <p className="text-sm text-slate-600">Date</p>
-                <p className="font-semibold text-slate-900">
+            <div className="space-y-3 sm:space-y-4 mt-3 sm:mt-4">
+              <div className="p-2 sm:p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs sm:text-sm text-slate-600">Date</p>
+                <p className="font-semibold text-slate-900 text-sm sm:text-base">
                   {format(new Date(selectedHoliday.date), 'EEEE, MMMM dd, yyyy')}
                 </p>
                 {selectedHoliday.is_recurring && (
-                  <Badge variant="outline" className="mt-2">
-                    <Repeat className="w-3 h-3 mr-1" />
+                  <Badge variant="outline" className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs">
+                    <Repeat className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
                     Recurring
                   </Badge>
                 )}
               </div>
 
               <div>
-                <Label>Holiday Name *</Label>
+                <Label className="text-xs sm:text-sm">Holiday Name *</Label>
                 <Input
                   value={holidayForm.name}
                   onChange={(e) => setHolidayForm({ ...holidayForm, name: e.target.value })}
-                  className="mt-1"
+                  className="mt-1 text-sm h-9 sm:h-10"
                 />
               </div>
 
               <div>
-                <Label>Type</Label>
+                <Label className="text-xs sm:text-sm">Type</Label>
                 <Select
                   value={holidayForm.type}
                   onValueChange={(value) => setHolidayForm({ ...holidayForm, type: value })}
                 >
-                  <SelectTrigger className="mt-1">
+                  <SelectTrigger className="mt-1 text-xs sm:text-sm h-9 sm:h-10">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="public">Public Holiday</SelectItem>
-                    <SelectItem value="optional">Optional Holiday</SelectItem>
-                    <SelectItem value="restricted">Restricted Holiday</SelectItem>
+                    <SelectItem value="public" className="text-xs sm:text-sm">Public Holiday</SelectItem>
+                    <SelectItem value="optional" className="text-xs sm:text-sm">Optional Holiday</SelectItem>
+                    <SelectItem value="restricted" className="text-xs sm:text-sm">Restricted Holiday</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
-                <Label>Description (Optional)</Label>
+                <Label className="text-xs sm:text-sm">Description (Optional)</Label>
                 <Textarea
                   value={holidayForm.description}
                   onChange={(e) => setHolidayForm({ ...holidayForm, description: e.target.value })}
                   rows={2}
-                  className="mt-1"
+                  className="mt-1 text-xs sm:text-sm"
                 />
               </div>
 
-              <div className="flex gap-3 pt-2">
+              <div className="flex gap-2 sm:gap-3 pt-2">
                 <Button
                   variant="outline"
                   onClick={handleDeleteHoliday}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 sm:h-10 px-2 sm:px-3"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </Button>
-                <Button variant="outline" onClick={() => setEditDialogOpen(false)} className="flex-1">
+                <Button variant="outline" onClick={() => setEditDialogOpen(false)} className="flex-1 text-xs sm:text-sm h-8 sm:h-10">
                   Cancel
                 </Button>
-                <Button onClick={handleUpdateHoliday} className="flex-1 bg-slate-800 hover:bg-slate-900">
-                  Save Changes
+                <Button onClick={handleUpdateHoliday} className="flex-1 bg-slate-800 hover:bg-slate-900 text-xs sm:text-sm h-8 sm:h-10">
+                  Save
                 </Button>
               </div>
             </div>
@@ -966,37 +988,37 @@ const HolidaysPage = () => {
 
       {/* View Holiday Dialog */}
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md mx-2 sm:mx-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Eye className="w-5 h-5" />
+            <DialogTitle className="flex items-center gap-1.5 sm:gap-2 text-base sm:text-lg">
+              <Eye className="w-4 h-4 sm:w-5 sm:h-5" />
               Holiday Details
             </DialogTitle>
           </DialogHeader>
           {selectedHoliday && (
-            <div className="space-y-4 mt-4">
+            <div className="space-y-3 sm:space-y-4 mt-3 sm:mt-4">
               {isDatePast(selectedHoliday.date) && isAdmin && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                  <p className="text-sm text-amber-800">
+                <div className="p-2 sm:p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-xs sm:text-sm text-amber-800">
                     This holiday is in the past and cannot be modified.
                   </p>
                 </div>
               )}
 
-              <div className={`p-4 rounded-lg border-2 ${getTypeColor(selectedHoliday.type, selectedHoliday.is_recurring).bg} ${getTypeColor(selectedHoliday.type, selectedHoliday.is_recurring).border}`}>
-                <p className={`text-lg font-semibold ${getTypeColor(selectedHoliday.type, selectedHoliday.is_recurring).text}`}>
+              <div className={`p-3 sm:p-4 rounded-lg border-2 ${getTypeColor(selectedHoliday.type, selectedHoliday.is_recurring).bg} ${getTypeColor(selectedHoliday.type, selectedHoliday.is_recurring).border}`}>
+                <p className={`text-base sm:text-lg font-semibold ${getTypeColor(selectedHoliday.type, selectedHoliday.is_recurring).text}`}>
                   {selectedHoliday.name}
                 </p>
-                <p className="text-sm text-slate-600 mt-1">
+                <p className="text-xs sm:text-sm text-slate-600 mt-0.5 sm:mt-1">
                   {format(new Date(selectedHoliday.date), 'EEEE, MMMM dd, yyyy')}
                 </p>
-                <div className="flex gap-2 mt-2">
-                  <Badge variant="outline" className="capitalize">
+                <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-1.5 sm:mt-2">
+                  <Badge variant="outline" className="capitalize text-[10px] sm:text-xs">
                     {selectedHoliday.type} Holiday
                   </Badge>
                   {selectedHoliday.is_recurring && (
-                    <Badge variant="outline" className="text-slate-500">
-                      <Repeat className="w-3 h-3 mr-1" />
+                    <Badge variant="outline" className="text-slate-500 text-[10px] sm:text-xs">
+                      <Repeat className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
                       Recurring
                     </Badge>
                   )}
@@ -1004,13 +1026,13 @@ const HolidaysPage = () => {
               </div>
 
               {selectedHoliday.description && (
-                <div className="p-3 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Description</p>
-                  <p className="text-sm text-slate-700">{selectedHoliday.description}</p>
+                <div className="p-2 sm:p-3 bg-slate-50 rounded-lg">
+                  <p className="text-[10px] sm:text-xs text-slate-500 uppercase tracking-wider mb-0.5 sm:mb-1">Description</p>
+                  <p className="text-xs sm:text-sm text-slate-700">{selectedHoliday.description}</p>
                 </div>
               )}
 
-              <Button variant="outline" onClick={() => setViewDialogOpen(false)} className="w-full">
+              <Button variant="outline" onClick={() => setViewDialogOpen(false)} className="w-full text-xs sm:text-sm h-8 sm:h-10">
                 Close
               </Button>
             </div>
@@ -1020,81 +1042,80 @@ const HolidaysPage = () => {
 
       {/* Recurring Holidays Dialog */}
       <Dialog open={recurringDialogOpen} onOpenChange={setRecurringDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md mx-2 sm:mx-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Repeat className="w-5 h-5" />
+            <DialogTitle className="flex items-center gap-1.5 sm:gap-2 text-base sm:text-lg">
+              <Repeat className="w-4 h-4 sm:w-5 sm:h-5" />
               Recurring Holidays
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-800">
-                Create or remove holidays for a specific day of the week (e.g., all Saturdays).
-                Only future dates will be affected. Recurring holidays appear grayed out in the calendar.
+          <div className="space-y-3 sm:space-y-4 mt-3 sm:mt-4">
+            <div className="p-2 sm:p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-[10px] sm:text-sm text-blue-800">
+                Create or remove holidays for a specific day of the week. Only future dates will be affected.
               </p>
             </div>
 
             <div>
-              <Label>Holiday Name *</Label>
+              <Label className="text-xs sm:text-sm">Holiday Name *</Label>
               <Input
                 placeholder="e.g., Saturday Off, Weekend"
                 value={recurringForm.name}
                 onChange={(e) => setRecurringForm({ ...recurringForm, name: e.target.value })}
-                className="mt-1"
+                className="mt-1 text-sm h-9 sm:h-10"
               />
             </div>
 
             <div>
-              <Label>Day of Week</Label>
+              <Label className="text-xs sm:text-sm">Day of Week</Label>
               <Select
                 value={recurringForm.day_of_week}
                 onValueChange={(value) => setRecurringForm({ ...recurringForm, day_of_week: value })}
               >
-                <SelectTrigger className="mt-1">
+                <SelectTrigger className="mt-1 text-xs sm:text-sm h-9 sm:h-10">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="0">Sunday</SelectItem>
-                  <SelectItem value="1">Monday</SelectItem>
-                  <SelectItem value="2">Tuesday</SelectItem>
-                  <SelectItem value="3">Wednesday</SelectItem>
-                  <SelectItem value="4">Thursday</SelectItem>
-                  <SelectItem value="5">Friday</SelectItem>
-                  <SelectItem value="6">Saturday</SelectItem>
+                  <SelectItem value="0" className="text-xs sm:text-sm">Sunday</SelectItem>
+                  <SelectItem value="1" className="text-xs sm:text-sm">Monday</SelectItem>
+                  <SelectItem value="2" className="text-xs sm:text-sm">Tuesday</SelectItem>
+                  <SelectItem value="3" className="text-xs sm:text-sm">Wednesday</SelectItem>
+                  <SelectItem value="4" className="text-xs sm:text-sm">Thursday</SelectItem>
+                  <SelectItem value="5" className="text-xs sm:text-sm">Friday</SelectItem>
+                  <SelectItem value="6" className="text-xs sm:text-sm">Saturday</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div>
-              <Label>Scope</Label>
+              <Label className="text-xs sm:text-sm">Scope</Label>
               <Select
                 value={recurringForm.scope}
                 onValueChange={(value) => setRecurringForm({ ...recurringForm, scope: value })}
               >
-                <SelectTrigger className="mt-1">
+                <SelectTrigger className="mt-1 text-xs sm:text-sm h-9 sm:h-10">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="month">Current Month</SelectItem>
-                  <SelectItem value="year">Entire Year ({currentYear})</SelectItem>
+                  <SelectItem value="month" className="text-xs sm:text-sm">Current Month</SelectItem>
+                  <SelectItem value="year" className="text-xs sm:text-sm">Entire Year ({currentYear})</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {recurringForm.scope === 'month' && (
               <div>
-                <Label>Month</Label>
+                <Label className="text-xs sm:text-sm">Month</Label>
                 <Select
                   value={String(selectedMonth)}
                   onValueChange={(value) => setSelectedMonth(parseInt(value, 10))}
                 >
-                  <SelectTrigger className="mt-1">
+                  <SelectTrigger className="mt-1 text-xs sm:text-sm h-9 sm:h-10">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {monthNames.map((month, idx) => (
-                      <SelectItem key={idx} value={String(idx)}>{month}</SelectItem>
+                      <SelectItem key={idx} value={String(idx)} className="text-xs sm:text-sm">{month}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1102,24 +1123,24 @@ const HolidaysPage = () => {
             )}
 
             <div>
-              <Label>Holiday Type</Label>
+              <Label className="text-xs sm:text-sm">Holiday Type</Label>
               <Select
                 value={recurringForm.type}
                 onValueChange={(value) => setRecurringForm({ ...recurringForm, type: value })}
               >
-                <SelectTrigger className="mt-1">
+                <SelectTrigger className="mt-1 text-xs sm:text-sm h-9 sm:h-10">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="public">Public Holiday</SelectItem>
-                  <SelectItem value="optional">Optional Holiday</SelectItem>
-                  <SelectItem value="restricted">Restricted Holiday</SelectItem>
+                  <SelectItem value="public" className="text-xs sm:text-sm">Public Holiday</SelectItem>
+                  <SelectItem value="optional" className="text-xs sm:text-sm">Optional Holiday</SelectItem>
+                  <SelectItem value="restricted" className="text-xs sm:text-sm">Restricted Holiday</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            <div className="bg-slate-50 p-3 rounded-lg">
-              <p className="text-sm text-slate-600">
+            <div className="bg-slate-50 p-2 sm:p-3 rounded-lg">
+              <p className="text-[10px] sm:text-sm text-slate-600">
                 This will create holidays for all <strong>{getDayName(parseInt(recurringForm.day_of_week, 10))}s</strong> in{' '}
                 <strong>
                   {recurringForm.scope === 'month'
@@ -1131,19 +1152,19 @@ const HolidaysPage = () => {
               </p>
             </div>
 
-            <div className="flex gap-3 pt-2">
+            <div className="flex flex-wrap gap-2 sm:gap-3 pt-2">
               <Button
                 variant="outline"
                 onClick={handleDeleteRecurring}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 text-[10px] sm:text-xs h-8 sm:h-10 px-2 sm:px-3"
               >
-                <Trash2 className="w-4 h-4 mr-2" />
+                <Trash2 className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
                 Remove All
               </Button>
-              <Button variant="outline" onClick={() => setRecurringDialogOpen(false)} className="flex-1">
+              <Button variant="outline" onClick={() => setRecurringDialogOpen(false)} className="flex-1 text-xs sm:text-sm h-8 sm:h-10">
                 Cancel
               </Button>
-              <Button onClick={handleCreateRecurring} className="flex-1 bg-emerald-600 hover:bg-emerald-700">
+              <Button onClick={handleCreateRecurring} className="flex-1 bg-slate-800 hover:bg-slate-900 text-xs sm:text-sm h-8 sm:h-10">
                 Create
               </Button>
             </div>
