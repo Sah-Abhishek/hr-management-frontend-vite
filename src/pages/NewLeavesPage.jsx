@@ -234,7 +234,7 @@ const LeavesPage = () => {
       }));
   }, [balanceUsage]);
 
-  // Validate advance notice for all selected leave types
+  // Validate advance notice for all selected leave types (only for future dates)
   const advanceNoticeWarnings = useMemo(() => {
     const warnings = [];
     const today = new Date();
@@ -248,6 +248,9 @@ const LeavesPage = () => {
 
       const leaveDate = new Date(dateStr);
       leaveDate.setHours(0, 0, 0, 0);
+
+      // Only check advance notice for future dates
+      if (leaveDate < today) return;
 
       const diffDays = Math.ceil((leaveDate - today) / (1000 * 60 * 60 * 24));
 
@@ -267,6 +270,18 @@ const LeavesPage = () => {
 
     return warnings;
   }, [selectedDates, leaveTypes]);
+
+  // Check if any past dates are selected
+  const pastDatesSelected = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return Object.keys(selectedDates).filter(dateStr => {
+      const date = new Date(dateStr);
+      date.setHours(0, 0, 0, 0);
+      return date < today;
+    });
+  }, [selectedDates]);
 
   // Create a map of holiday dates for quick lookup
   const getHolidayMap = () => {
@@ -338,15 +353,6 @@ const LeavesPage = () => {
   };
 
   const toggleDateSelection = (dateKey) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const selectedDate = new Date(dateKey);
-
-    if (selectedDate < today) {
-      toast.error('Cannot select past dates');
-      return;
-    }
-
     if (isHoliday(dateKey)) {
       const holiday = getHolidayInfo(dateKey);
       toast.error(`${holiday.name} - This is a holiday, no need to apply for leave`);
@@ -637,7 +643,7 @@ const LeavesPage = () => {
       const isHolidayDate = !!holidayInfo;
       const existingLeaveInfo = getExistingLeaveInfo(dateKey);
       const hasLeave = !!existingLeaveInfo;
-      const isBlocked = isPast || isHolidayDate || hasLeave;
+      const isBlocked = isHolidayDate || hasLeave;
 
       // Get color based on selected leave type
       const selectedLeaveTypeCalendarColor = isSelected && config?.leaveType
@@ -652,12 +658,12 @@ const LeavesPage = () => {
           disabled={isBlocked}
           className={`
             h-8 w-8 sm:h-10 sm:w-10 rounded-full text-xs sm:text-sm font-medium transition-all relative
-            ${isPast ? 'text-slate-300 cursor-not-allowed' : ''}
-            ${isHolidayDate && !isPast ? 'bg-rose-100 text-rose-600 cursor-not-allowed border-2 border-rose-300' : ''}
-            ${hasLeave && !isPast && !isHolidayDate ? 'bg-blue-100 text-blue-600 cursor-not-allowed border-2 border-blue-300' : ''}
+            ${isHolidayDate ? 'bg-rose-100 text-rose-600 cursor-not-allowed border-2 border-rose-300' : ''}
+            ${hasLeave && !isHolidayDate ? 'bg-blue-100 text-blue-600 cursor-not-allowed border-2 border-blue-300' : ''}
             ${!isBlocked ? 'cursor-pointer hover:bg-slate-100' : ''}
             ${isToday && !isSelected && !isBlocked ? 'ring-2 ring-blue-400 ring-offset-1' : ''}
             ${isWeekend && !isSelected && !isBlocked ? 'text-slate-400' : ''}
+            ${isPast && !isSelected && !isBlocked ? 'text-slate-400' : ''}
             ${isSelected && config?.type === 'full' ? `${selectedLeaveTypeCalendarColor} text-white` : ''}
             ${isSelected && config?.type === 'half' ? `${selectedLeaveTypeCalendarColor} text-white opacity-70` : ''}
           `}
@@ -691,7 +697,7 @@ const LeavesPage = () => {
             </Tooltip>
           </TooltipProvider>
         );
-      } else if (hasLeave && !isPast) {
+      } else if (hasLeave) {
         days.push(
           <TooltipProvider key={day}>
             <Tooltip>
@@ -944,6 +950,9 @@ const LeavesPage = () => {
                         {sortedSelectedDates.map((dateKey) => {
                           const config = selectedDates[dateKey];
                           const date = new Date(dateKey);
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          const isPastDate = date < today;
 
                           // Check if this date's leave type is part of a clubbing conflict
                           const isInConflict = clubbingValidation.errors.some(
@@ -964,6 +973,11 @@ const LeavesPage = () => {
                                   <span className="font-medium text-slate-700 text-xs sm:text-sm">
                                     {format(date, 'EEE, MMM dd')}
                                   </span>
+                                  {isPastDate && (
+                                    <Badge className="bg-orange-100 text-orange-700 border-orange-200 text-[8px] sm:text-xs px-1 sm:px-1.5 py-0">
+                                      Past
+                                    </Badge>
+                                  )}
                                   {isInConflict && (
                                     <Badge className="bg-red-500 text-white text-[8px] sm:text-xs px-1 sm:px-1.5 py-0">
                                       ⚠️
@@ -1123,6 +1137,18 @@ const LeavesPage = () => {
                 </div>
               )}
 
+              {/* Past Dates Warning */}
+              {pastDatesSelected.length > 0 && (
+                <Alert className="bg-orange-50 border-orange-200 p-2 sm:p-4">
+                  <AlertTriangle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-orange-600" />
+                  <AlertTitle className="text-orange-800 text-xs sm:text-sm">Retroactive Leave Application</AlertTitle>
+                  <AlertDescription className="text-orange-700 text-[10px] sm:text-sm">
+                    You are applying for leave on {pastDatesSelected.length} past date{pastDatesSelected.length > 1 ? 's' : ''}.
+                    This may require additional approval from your manager.
+                  </AlertDescription>
+                </Alert>
+              )}
+
               {/* Clubbing Validation Error - More Prominent */}
               {!clubbingValidation.valid && (
                 <Alert variant="destructive" className="bg-red-100 border-2 border-red-500 animate-pulse p-2 sm:p-4">
@@ -1206,6 +1232,11 @@ const LeavesPage = () => {
                     {selectedLeaveTypesSet.length > 1 && (
                       <span className="ml-1.5 sm:ml-2 text-slate-500 text-[10px] sm:text-xs">
                         ({selectedLeaveTypesSet.length} types)
+                      </span>
+                    )}
+                    {pastDatesSelected.length > 0 && (
+                      <span className="ml-1.5 sm:ml-2 text-orange-600 text-[10px] sm:text-xs">
+                        ({pastDatesSelected.length} past)
                       </span>
                     )}
                   </div>
