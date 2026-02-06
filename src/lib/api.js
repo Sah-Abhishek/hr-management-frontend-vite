@@ -1,5 +1,5 @@
 // import axios from 'axios';
-
+//
 // const BACKEND_URL = import.meta.env.VITE_APP_BACKEND_URL;
 // const API_BASE = `${BACKEND_URL}/api`;
 //
@@ -35,7 +35,6 @@
 // );
 //
 // export default api;
-
 
 import axios from 'axios';
 

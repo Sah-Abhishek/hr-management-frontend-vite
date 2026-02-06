@@ -5,6 +5,7 @@ import { clearAuth, getAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
 import { ClipboardCheck } from 'lucide-react';
+import NotificationBell from '@/components/NotificationBell';
 
 
 const Layout = () => {
@@ -180,18 +181,21 @@ const Layout = () => {
         </nav>
 
         <div className="p-4 border-t border-slate-200">
-          <Link
-            to="/profile"
-            className="flex items-center mb-3 p-2 -mx-2 rounded-lg hover:bg-slate-50 transition-colors"
-          >
-            <UserAvatar size="md" />
-            <div className="ml-3 flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900 truncate">
-                {displayName}
-              </p>
-              <p className="text-xs text-slate-500 truncate capitalize">{user?.role}</p>
-            </div>
-          </Link>
+          <div className="flex items-center justify-between mb-3">
+            <Link
+              to="/profile"
+              className="flex items-center flex-1 p-2 -mx-2 rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              <UserAvatar size="md" />
+              <div className="ml-3 flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-900 truncate">
+                  {displayName}
+                </p>
+                <p className="text-xs text-slate-500 truncate capitalize">{user?.role}</p>
+              </div>
+            </Link>
+            <NotificationBell />
+          </div>
           <Button
             onClick={handleLogout}
             data-testid="logout-btn"
@@ -310,28 +314,31 @@ const Layout = () => {
           <h1 className="text-lg font-bold text-slate-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
             HRMS
           </h1>
-          {/* Mobile header avatar */}
-          <Link to="/profile" className="flex-shrink-0">
-            <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-slate-100">
-              {profilePictureUrl ? (
-                <img
-                  src={profilePictureUrl}
-                  alt={displayName}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    e.target.nextSibling.style.display = 'flex';
-                  }}
-                />
-              ) : null}
-              <div
-                className={`w-full h-full ${getAvatarColor(displayName)} flex items-center justify-center text-white font-semibold text-xs`}
-                style={{ display: profilePictureUrl ? 'none' : 'flex' }}
-              >
-                {getInitials(displayName)}
+          {/* Mobile header actions */}
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <Link to="/profile" className="flex-shrink-0">
+              <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-slate-100">
+                {profilePictureUrl ? (
+                  <img
+                    src={profilePictureUrl}
+                    alt={displayName}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
+                <div
+                  className={`w-full h-full ${getAvatarColor(displayName)} flex items-center justify-center text-white font-semibold text-xs`}
+                  style={{ display: profilePictureUrl ? 'none' : 'flex' }}
+                >
+                  {getInitials(displayName)}
+                </div>
               </div>
-            </div>
-          </Link>
+            </Link>
+          </div>
         </div>
 
         {/* Page Content */}

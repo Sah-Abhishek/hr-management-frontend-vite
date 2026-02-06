@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Plus, Trash2, Save, Send, Calendar, Info, ChevronDown, ChevronUp, Calculator, User, Wallet } from 'lucide-react';
+import { DollarSign, Plus, Trash2, Save, Send, Calendar, Info, ChevronDown, ChevronUp, Calculator, User, Wallet, TreePalm, ClipboardList, TrendingDown, Clock, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,30 @@ import { toast } from 'sonner';
 import api from '@/lib/api';
 import { format } from 'date-fns';
 
+const LEAVE_TYPE_CONFIG = {
+  earned_leave: { label: 'Earned Leave', color: 'emerald', bg: 'from-emerald-50 to-green-50', border: 'border-emerald-200', text: 'text-emerald-700', badge: 'bg-emerald-100 text-emerald-700' },
+  sick_leave: { label: 'Sick Leave', color: 'red', bg: 'from-red-50 to-rose-50', border: 'border-red-200', text: 'text-red-700', badge: 'bg-red-100 text-red-700' },
+  casual_leave: { label: 'Casual Leave', color: 'blue', bg: 'from-blue-50 to-indigo-50', border: 'border-blue-200', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-700' },
+  paid_leave: { label: 'Paid Leave', color: 'green', bg: 'from-green-50 to-emerald-50', border: 'border-green-200', text: 'text-green-700', badge: 'bg-green-100 text-green-700' },
+  unpaid_leave: { label: 'Unpaid Leave', color: 'amber', bg: 'from-amber-50 to-orange-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-700' },
+  comp_off: { label: 'Comp Off', color: 'purple', bg: 'from-purple-50 to-violet-50', border: 'border-purple-200', text: 'text-purple-700', badge: 'bg-purple-100 text-purple-700' },
+};
+
+const STATUS_CONFIG = {
+  pending: { label: 'Pending', icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', badge: 'bg-amber-100 text-amber-700 border-amber-200' },
+  manager_approved: { label: 'Manager Approved', icon: AlertCircle, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700 border-blue-200' },
+  approved: { label: 'Approved', icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  rejected: { label: 'Rejected', icon: XCircle, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700 border-red-200' },
+};
+
+/**
+ * Helper: normalize leave type string to snake_case key
+ */
+function normalizeLeaveTypeKey(leaveType) {
+  if (!leaveType) return '';
+  return leaveType.toLowerCase().replace(/\s+/g, '_');
+}
+
 const SalaryStructurePage = () => {
   const [employees, setEmployees] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
@@ -20,6 +44,15 @@ const SalaryStructurePage = () => {
   const [sending, setSending] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [salaryTemplate, setSalaryTemplate] = useState(null);
+
+  // Leave balance state
+  const [leaveBalance, setLeaveBalance] = useState(null);
+  const [leaveBalanceLoading, setLeaveBalanceLoading] = useState(false);
+
+  // Leave summary state
+  const [leaveSummary, setLeaveSummary] = useState({ usageByType: {}, applications: [] });
+  const [leaveSummaryLoading, setLeaveSummaryLoading] = useState(false);
+  const [showAllApplications, setShowAllApplications] = useState(false);
 
   // Unpaid leave states
   const [unpaidLeaves, setUnpaidLeaves] = useState([]);
@@ -45,6 +78,7 @@ const SalaryStructurePage = () => {
   useEffect(() => {
     if (selectedEmployee && selectedMonth) {
       fetchUnpaidLeaves();
+      fetchLeaveSummary();
     }
   }, [selectedEmployee, selectedMonth]);
 
@@ -63,6 +97,102 @@ const SalaryStructurePage = () => {
       setEmployees(response.data);
     } catch (error) {
       toast.error('Failed to load employees');
+    }
+  };
+
+  const fetchLeaveBalance = async (employeeData) => {
+    // First check if the employee data already has leave_balance
+    if (employeeData?.leave_balance && Object.keys(employeeData.leave_balance).length > 0) {
+      setLeaveBalance(employeeData.leave_balance);
+      return;
+    }
+
+    // Otherwise try to fetch from the employee profile API
+    setLeaveBalanceLoading(true);
+    try {
+      const response = await api.get(`/employees/${employeeData.id || employeeData.employee_id}`);
+      if (response.data?.leave_balance) {
+        setLeaveBalance(response.data.leave_balance);
+      } else {
+        setLeaveBalance(null);
+      }
+    } catch (error) {
+      console.error('Failed to fetch leave balance:', error);
+      setLeaveBalance(null);
+    } finally {
+      setLeaveBalanceLoading(false);
+    }
+  };
+
+  const fetchLeaveSummary = async () => {
+    if (!selectedEmployee || !selectedMonth) return;
+
+    setLeaveSummaryLoading(true);
+    try {
+      const response = await api.get('/leaves/all');
+      const employeeData = employees.find(e => e.id === selectedEmployee);
+      const employeeEmail = employeeData?.email;
+
+      if (!employeeEmail) {
+        setLeaveSummary({ usageByType: {}, applications: [] });
+        return;
+      }
+
+      const allLeaves = response.data || [];
+
+      // Filter leaves for this employee
+      const employeeLeaves = allLeaves.filter(leave => leave.employee_email === employeeEmail);
+
+      // Get leaves that have dates in the selected month (for usage stats - only approved/manager_approved)
+      const [year, month] = selectedMonth.split('-');
+      const usageByType = {};
+      let totalDaysTaken = 0;
+
+      employeeLeaves.forEach(leave => {
+        if (leave.status === 'rejected') return;
+
+        const daysInMonth = (leave.dates || []).filter(dateStr => {
+          const date = new Date(dateStr);
+          return date.getFullYear() === parseInt(year) && date.getMonth() + 1 === parseInt(month);
+        }).length;
+
+        if (daysInMonth === 0) return;
+
+        const typeKey = normalizeLeaveTypeKey(leave.leave_type);
+        const effectiveDays = leave.is_half_day ? daysInMonth * 0.5 : daysInMonth;
+
+        if (!usageByType[typeKey]) {
+          usageByType[typeKey] = { total: 0, approved: 0, pending: 0 };
+        }
+
+        usageByType[typeKey].total += effectiveDays;
+
+        if (leave.status === 'approved' || leave.status === 'manager_approved') {
+          usageByType[typeKey].approved += effectiveDays;
+          totalDaysTaken += effectiveDays;
+        } else if (leave.status === 'pending') {
+          usageByType[typeKey].pending += effectiveDays;
+        }
+      });
+
+      // Get recent applications (all statuses, sorted by created_at)
+      const applications = employeeLeaves
+        .filter(leave => {
+          // Include leaves that have any date in the selected month OR were created in the selected month
+          const hasDateInMonth = (leave.dates || []).some(dateStr => {
+            const date = new Date(dateStr);
+            return date.getFullYear() === parseInt(year) && date.getMonth() + 1 === parseInt(month);
+          });
+          return hasDateInMonth;
+        })
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+      setLeaveSummary({ usageByType, applications, totalDaysTaken });
+    } catch (error) {
+      console.error('Failed to fetch leave summary:', error);
+      setLeaveSummary({ usageByType: {}, applications: [] });
+    } finally {
+      setLeaveSummaryLoading(false);
     }
   };
 
@@ -119,10 +249,14 @@ const SalaryStructurePage = () => {
     const empData = employees.find(e => e.id === empId);
     setSelectedEmployeeData(empData);
     setLoading(true);
+    setShowAllApplications(false);
 
     // Reset deduction rates when employee changes
     setPerFullDayDeduction(0);
     setPerHalfDayDeduction(0);
+
+    // Fetch leave balance for the selected employee
+    fetchLeaveBalance(empData);
 
     try {
       const response = await api.get(`/salary-structure/${empId}`);
@@ -316,8 +450,54 @@ const SalaryStructurePage = () => {
     }
   };
 
+  // Helper to get formatted leave balance entries (excluding zero-balance and unpaid)
+  const getLeaveBalanceEntries = () => {
+    if (!leaveBalance) return [];
+
+    return Object.entries(leaveBalance)
+      .map(([key, value]) => ({
+        key,
+        value: parseFloat(value) || 0,
+        config: LEAVE_TYPE_CONFIG[key] || {
+          label: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          bg: 'from-slate-50 to-gray-50',
+          border: 'border-slate-200',
+          text: 'text-slate-700',
+          badge: 'bg-slate-100 text-slate-700'
+        }
+      }))
+      .sort((a, b) => b.value - a.value);
+  };
+
+  const getTotalLeaveBalance = () => {
+    if (!leaveBalance) return 0;
+    return Object.entries(leaveBalance)
+      .filter(([key]) => key !== 'unpaid_leave')
+      .reduce((sum, [, val]) => sum + (parseFloat(val) || 0), 0);
+  };
+
+  // Helper to get usage summary entries
+  const getUsageEntries = () => {
+    return Object.entries(leaveSummary.usageByType)
+      .map(([key, data]) => ({
+        key,
+        ...data,
+        config: LEAVE_TYPE_CONFIG[key] || {
+          label: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          bg: 'from-slate-50 to-gray-50',
+          border: 'border-slate-200',
+          text: 'text-slate-700',
+          badge: 'bg-slate-100 text-slate-700'
+        }
+      }))
+      .sort((a, b) => b.total - a.total);
+  };
+
   const totals = calculateTotals();
   const monthName = selectedMonth ? format(new Date(selectedMonth + '-01'), 'MMMM yyyy') : '';
+  const visibleApplications = showAllApplications
+    ? leaveSummary.applications
+    : leaveSummary.applications.slice(0, 3);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-8">
@@ -806,7 +986,7 @@ const SalaryStructurePage = () => {
           {/* Summary Panel */}
           <div className="space-y-6">
             {/* Salary Summary Card */}
-            <Card className="border-0 shadow-md sticky top-4 overflow-hidden">
+            <Card className="border-0 shadow-md  top-4 overflow-hidden">
               <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-800 to-slate-900 text-white">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-white/20 rounded-lg">
@@ -912,6 +1092,281 @@ const SalaryStructurePage = () => {
                 )}
               </CardContent>
             </Card>
+
+            {/* Leave Balance Card */}
+            {selectedEmployee && (
+              <Card className="border-0 shadow-md overflow-hidden">
+                <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-teal-600 to-cyan-700 text-white py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-white/20 rounded-lg">
+                        <TreePalm className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-white text-base">Leave Balance</CardTitle>
+                        <p className="text-xs text-teal-100 mt-0.5">
+                          {selectedEmployeeData?.full_name}
+                        </p>
+                      </div>
+                    </div>
+                    {leaveBalance && (
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-white">{getTotalLeaveBalance().toFixed(1)}</p>
+                        <p className="text-xs text-teal-100">Total Days</p>
+                      </div>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4">
+                  {leaveBalanceLoading ? (
+                    <div className="text-center py-8 text-slate-500">
+                      <div className="animate-spin w-8 h-8 border-3 border-slate-200 border-t-teal-600 rounded-full mx-auto mb-3"></div>
+                      <p className="text-sm font-medium">Loading leave balance...</p>
+                    </div>
+                  ) : leaveBalance ? (
+                    <div className="space-y-2.5">
+                      {getLeaveBalanceEntries().map(({ key, value, config }) => (
+                        <div
+                          key={key}
+                          className={`flex items-center justify-between py-3 px-4 rounded-xl bg-gradient-to-r ${config.bg} border ${config.border} transition-all duration-200 hover:shadow-sm`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-2.5 h-2.5 rounded-full ${config.text === 'text-emerald-700' ? 'bg-emerald-500' :
+                              config.text === 'text-red-700' ? 'bg-red-500' :
+                                config.text === 'text-blue-700' ? 'bg-blue-500' :
+                                  config.text === 'text-green-700' ? 'bg-green-500' :
+                                    config.text === 'text-amber-700' ? 'bg-amber-500' :
+                                      config.text === 'text-purple-700' ? 'bg-purple-500' :
+                                        'bg-slate-500'
+                              }`}></div>
+                            <span className="text-sm font-medium text-slate-700">{config.label}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-lg font-bold ${config.text}`}>
+                              {value % 1 === 0 ? value : value.toFixed(1)}
+                            </span>
+                            <span className="text-xs text-slate-400 font-medium">days</span>
+                          </div>
+                        </div>
+                      ))}
+
+                      {getLeaveBalanceEntries().length === 0 && (
+                        <div className="text-center py-6 text-slate-400">
+                          <p className="text-sm">No leave balance data available</p>
+                        </div>
+                      )}
+
+                      {/* Summary footer */}
+                      {getLeaveBalanceEntries().filter(e => e.key !== 'unpaid_leave').length > 0 && (
+                        <div className="flex items-center justify-between pt-3 mt-2 border-t border-slate-200 px-1">
+                          <span className="text-sm font-semibold text-slate-600">Available (excl. Unpaid)</span>
+                          <span className="text-lg font-bold text-teal-700">
+                            {getTotalLeaveBalance().toFixed(1)} days
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-400">
+                      <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <TreePalm className="w-7 h-7 text-slate-300" />
+                      </div>
+                      <p className="text-sm font-medium">No leave balance found</p>
+                      <p className="text-xs mt-1">Apply leave policy to this employee first</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Leaves Summary Card - NEW */}
+            {selectedEmployee && (
+              <Card className="border-0 shadow-md overflow-hidden">
+                <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-violet-600 to-purple-700 text-white py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-white/20 rounded-lg">
+                        <ClipboardList className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-white text-base">Leaves Summary</CardTitle>
+                        <p className="text-xs text-violet-100 mt-0.5">{monthName}</p>
+                      </div>
+                    </div>
+                    {leaveSummary.totalDaysTaken > 0 && (
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-white">{leaveSummary.totalDaysTaken}</p>
+                        <p className="text-xs text-violet-100">Days Taken</p>
+                      </div>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4">
+                  {leaveSummaryLoading ? (
+                    <div className="text-center py-8 text-slate-500">
+                      <div className="animate-spin w-8 h-8 border-3 border-slate-200 border-t-violet-600 rounded-full mx-auto mb-3"></div>
+                      <p className="text-sm font-medium">Loading leaves summary...</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      {/* Usage by Type */}
+                      {getUsageEntries().length > 0 ? (
+                        <div>
+                          <div className="flex items-center gap-2 mb-3">
+                            <TrendingDown className="w-4 h-4 text-violet-600" />
+                            <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Usage by Type</h4>
+                          </div>
+                          <div className="space-y-2">
+                            {getUsageEntries().map(({ key, total, approved, pending, config }) => (
+                              <div
+                                key={key}
+                                className={`py-3 px-4 rounded-xl bg-gradient-to-r ${config.bg} border ${config.border} transition-all duration-200 hover:shadow-sm`}
+                              >
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className="text-sm font-medium text-slate-700">{config.label}</span>
+                                  <span className={`text-base font-bold ${config.text}`}>
+                                    {total % 1 === 0 ? total : total.toFixed(1)} days
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {approved > 0 && (
+                                    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                                      <CheckCircle2 className="w-3 h-3" />
+                                      {approved % 1 === 0 ? approved : approved.toFixed(1)} approved
+                                    </span>
+                                  )}
+                                  {pending > 0 && (
+                                    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                                      <Clock className="w-3 h-3" />
+                                      {pending % 1 === 0 ? pending : pending.toFixed(1)} pending
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-4 text-slate-400">
+                          <p className="text-sm">No leaves taken in {monthName}</p>
+                        </div>
+                      )}
+
+                      {/* Divider */}
+                      {leaveSummary.applications.length > 0 && (
+                        <div className="border-t border-slate-200"></div>
+                      )}
+
+                      {/* Recent Applications */}
+                      {leaveSummary.applications.length > 0 && (
+                        <div>
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="w-4 h-4 text-violet-600" />
+                              <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Applications</h4>
+                            </div>
+                            <Badge variant="outline" className="text-xs bg-violet-50 text-violet-700 border-violet-200">
+                              {leaveSummary.applications.length} total
+                            </Badge>
+                          </div>
+                          <div className="space-y-2.5">
+                            {visibleApplications.map((leave, idx) => {
+                              const typeKey = normalizeLeaveTypeKey(leave.leave_type);
+                              const typeConfig = LEAVE_TYPE_CONFIG[typeKey] || {
+                                label: leave.leave_type,
+                                badge: 'bg-slate-100 text-slate-700'
+                              };
+                              const statusConf = STATUS_CONFIG[leave.status] || STATUS_CONFIG.pending;
+                              const StatusIcon = statusConf.icon;
+
+                              return (
+                                <div
+                                  key={leave.id || idx}
+                                  className={`p-3.5 rounded-xl border ${statusConf.border} ${statusConf.bg} transition-all duration-200 hover:shadow-sm`}
+                                >
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${typeConfig.badge}`}>
+                                        {typeConfig.label}
+                                      </span>
+                                      {leave.is_half_day && (
+                                        <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-600">
+                                          Half Day
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className={`flex items-center gap-1 text-xs font-medium ${statusConf.color}`}>
+                                      <StatusIcon className="w-3.5 h-3.5" />
+                                      {statusConf.label}
+                                    </div>
+                                  </div>
+
+                                  {/* Dates */}
+                                  <div className="flex flex-wrap gap-1 mb-2">
+                                    {(leave.dates || []).slice(0, 5).map((date, i) => (
+                                      <span key={i} className="px-2 py-0.5 bg-white/80 text-slate-600 rounded-md text-xs font-medium border border-slate-200">
+                                        {format(new Date(date), 'MMM dd')}
+                                      </span>
+                                    ))}
+                                    {(leave.dates || []).length > 5 && (
+                                      <span className="px-2 py-0.5 bg-white/80 text-slate-500 rounded-md text-xs font-medium border border-slate-200">
+                                        +{leave.dates.length - 5} more
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Days count & reason */}
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-xs text-slate-500 truncate max-w-[70%]" title={leave.reason}>
+                                      {leave.reason || 'No reason provided'}
+                                    </p>
+                                    <span className="text-xs font-semibold text-slate-600">
+                                      {leave.days_count || leave.dates?.length || 0} day{(leave.days_count || leave.dates?.length || 0) !== 1 ? 's' : ''}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Show more/less toggle */}
+                          {leaveSummary.applications.length > 3 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAllApplications(!showAllApplications)}
+                              className="flex items-center gap-1.5 text-sm text-violet-600 hover:text-violet-700 transition-colors font-medium mt-3 mx-auto"
+                            >
+                              {showAllApplications ? (
+                                <>
+                                  <ChevronUp className="w-4 h-4" />
+                                  Show less
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="w-4 h-4" />
+                                  Show all {leaveSummary.applications.length} applications
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Empty state for no applications */}
+                      {leaveSummary.applications.length === 0 && getUsageEntries().length === 0 && (
+                        <div className="text-center py-8 text-slate-400">
+                          <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <ClipboardList className="w-7 h-7 text-slate-300" />
+                          </div>
+                          <p className="text-sm font-medium">No leave applications</p>
+                          <p className="text-xs mt-1">No leaves found for {monthName}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Quick Stats */}
             {selectedEmployee && (
