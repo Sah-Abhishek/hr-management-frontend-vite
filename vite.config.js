@@ -10,7 +10,10 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: [
         "logo.png",
-        "android-launchericon-*.png",
+        "favicon.ico",
+        "favicon.svg",
+        "safari-pinned-tab.svg",
+        "apple-touch-icon.png",
       ],
       manifest: {
         name: "HRMS - Human Resource Management",
@@ -25,37 +28,22 @@ export default defineConfig({
         categories: ["business", "productivity"],
         icons: [
           {
-            src: "/android-launchericon-48-48.png",
+            src: "/favicon-48x48.png",
             sizes: "48x48",
             type: "image/png",
           },
           {
-            src: "/android-launchericon-72-72.png",
-            sizes: "72x72",
-            type: "image/png",
-          },
-          {
-            src: "/android-launchericon-96-96.png",
-            sizes: "96x96",
-            type: "image/png",
-          },
-          {
-            src: "/android-launchericon-144-144.png",
-            sizes: "144x144",
-            type: "image/png",
-          },
-          {
-            src: "/android-launchericon-192-192.png",
+            src: "/android-chrome-192x192.png",
             sizes: "192x192",
             type: "image/png",
           },
           {
-            src: "/android-launchericon-512-512.png",
+            src: "/android-chrome-512x512.png",
             sizes: "512x512",
             type: "image/png",
           },
           {
-            src: "/android-launchericon-512-512.png",
+            src: "/android-chrome-512x512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",
@@ -67,21 +55,21 @@ export default defineConfig({
             short_name: "Dashboard",
             description: "Go to Dashboard",
             url: "/",
-            icons: [{ src: "/android-launchericon-96-96.png", sizes: "96x96" }],
+            icons: [{ src: "/android-chrome-192x192.png", sizes: "192x192" }],
           },
           {
             name: "My Leaves",
             short_name: "Leaves",
             description: "View my leaves",
             url: "/leaves",
-            icons: [{ src: "/android-launchericon-96-96.png", sizes: "96x96" }],
+            icons: [{ src: "/android-chrome-192x192.png", sizes: "192x192" }],
           },
           {
             name: "Profile",
             short_name: "Profile",
             description: "View my profile",
             url: "/profile",
-            icons: [{ src: "/android-launchericon-96-96.png", sizes: "96x96" }],
+            icons: [{ src: "/android-chrome-192x192.png", sizes: "192x192" }],
           },
         ],
       },
