@@ -31,7 +31,8 @@ const LeavePolicyPage = () => {
     carry_forward_allowed: false,
     max_carry_forward_days: 0,
     clubbing_allowed_with: [],
-    clubbing_not_allowed_with: []
+    clubbing_not_allowed_with: [],
+    is_unlimited: false
   });
 
   useEffect(() => {
@@ -55,7 +56,8 @@ const LeavePolicyPage = () => {
         carry_forward_allowed: p.carry_forward_allowed ?? false,
         max_carry_forward_days: p.max_carry_forward_days ?? 0,
         clubbing_allowed_with: p.clubbing_allowed_with || [],
-        clubbing_not_allowed_with: p.clubbing_not_allowed_with || []
+        clubbing_not_allowed_with: p.clubbing_not_allowed_with || [],
+        is_unlimited: p.is_unlimited ?? false
       }));
 
       setPolicy({
@@ -123,7 +125,8 @@ const LeavePolicyPage = () => {
             carry_forward_allowed: false,
             max_carry_forward_days: 0,
             clubbing_allowed_with: [],
-            clubbing_not_allowed_with: []
+            clubbing_not_allowed_with: [],
+            is_unlimited: true
           }
         ],
         clubbing_rules: [
@@ -337,80 +340,96 @@ const LeavePolicyPage = () => {
                         </div>
                       </CardHeader>
                       <CardContent className="p-6 space-y-6">
-                        {/* Credit Type Selection */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className="space-y-3">
-                            <Label className="text-base font-semibold flex items-center gap-2">
-                              <Clock className="w-4 h-4" />
-                              Credit Type
-                            </Label>
-                            <Select
-                              value={policyItem.credit_type}
-                              onValueChange={(value) => {
-                                updatePolicy(index, 'credit_type', value);
-                                if (value === 'annually') {
-                                  updatePolicy(index, 'monthly_credit', 0);
-                                }
-                              }}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="monthly">
-                                  <div className="flex items-center gap-2">
-                                    <span>📅 Monthly Credit</span>
-                                  </div>
-                                </SelectItem>
-                                <SelectItem value="annually">
-                                  <div className="flex items-center gap-2">
-                                    <span>📆 Annual Credit</span>
-                                  </div>
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <p className="text-xs text-slate-500">
-                              {policyItem.credit_type === 'monthly'
-                                ? 'Leaves are credited every month based on joining date'
-                                : 'Full quota credited at the start of year/joining'}
+                        {/* Unlimited Toggle */}
+                        <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border-2 border-purple-200">
+                          <div>
+                            <Label className="font-semibold text-base">Unlimited Leave</Label>
+                            <p className="text-xs text-slate-600 mt-1">
+                              No balance checking - employees can take as many days as needed
                             </p>
                           </div>
-
-                          {/* Quota / Monthly Credit */}
-                          <div className="space-y-3">
-                            {policyItem.credit_type === 'monthly' ? (
-                              <>
-                                <Label className="text-base font-semibold">Monthly Credit (days/month)</Label>
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.5"
-                                  value={policyItem.monthly_credit}
-                                  onChange={(e) => updatePolicy(index, 'monthly_credit', parseFloat(e.target.value) || 0)}
-                                  className="bg-white"
-                                />
-                                <p className="text-xs text-slate-500">
-                                  Annual quota: {(policyItem.monthly_credit || 0) * 12} days/year
-                                </p>
-                              </>
-                            ) : (
-                              <>
-                                <Label className="text-base font-semibold">Annual Quota (days/year)</Label>
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.5"
-                                  value={policyItem.annual_quota}
-                                  onChange={(e) => updatePolicy(index, 'annual_quota', parseFloat(e.target.value) || 0)}
-                                  className="bg-white"
-                                />
-                                <p className="text-xs text-slate-500">
-                                  {policyItem.annual_quota === 0 ? 'Unlimited/Unpaid leave' : `${policyItem.annual_quota} days credited at start`}
-                                </p>
-                              </>
-                            )}
-                          </div>
+                          <Switch
+                            checked={policyItem.is_unlimited || false}
+                            onCheckedChange={(checked) => updatePolicy(index, 'is_unlimited', checked)}
+                          />
                         </div>
+
+                        {/* Credit Type Selection - Only show if not unlimited */}
+                        {!policyItem.is_unlimited && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-3">
+                              <Label className="text-base font-semibold flex items-center gap-2">
+                                <Clock className="w-4 h-4" />
+                                Credit Type
+                              </Label>
+                              <Select
+                                value={policyItem.credit_type}
+                                onValueChange={(value) => {
+                                  updatePolicy(index, 'credit_type', value);
+                                  if (value === 'annually') {
+                                    updatePolicy(index, 'monthly_credit', 0);
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="monthly">
+                                    <div className="flex items-center gap-2">
+                                      <span>📅 Monthly Credit</span>
+                                    </div>
+                                  </SelectItem>
+                                  <SelectItem value="annually">
+                                    <div className="flex items-center gap-2">
+                                      <span>📆 Annual Credit</span>
+                                    </div>
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <p className="text-xs text-slate-500">
+                                {policyItem.credit_type === 'monthly'
+                                  ? 'Leaves are credited every month based on joining date'
+                                  : 'Full quota credited at the start of year/joining'}
+                              </p>
+                            </div>
+
+                            {/* Quota / Monthly Credit */}
+                            <div className="space-y-3">
+                              {policyItem.credit_type === 'monthly' ? (
+                                <>
+                                  <Label className="text-base font-semibold">Monthly Credit (days/month)</Label>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.5"
+                                    value={policyItem.monthly_credit}
+                                    onChange={(e) => updatePolicy(index, 'monthly_credit', parseFloat(e.target.value) || 0)}
+                                    className="bg-white"
+                                  />
+                                  <p className="text-xs text-slate-500">
+                                    Annual quota: {(policyItem.monthly_credit || 0) * 12} days/year
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <Label className="text-base font-semibold">Annual Quota (days/year)</Label>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.5"
+                                    value={policyItem.annual_quota}
+                                    onChange={(e) => updatePolicy(index, 'annual_quota', parseFloat(e.target.value) || 0)}
+                                    className="bg-white"
+                                  />
+                                  <p className="text-xs text-slate-500">
+                                    {policyItem.annual_quota} days credited at start
+                                  </p>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Advance Notice */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -451,34 +470,36 @@ const LeavePolicyPage = () => {
                           )}
                         </div>
 
-                        {/* Toggles */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-200">
-                          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                            <div>
-                              <Label className="font-medium">Encashment Allowed</Label>
-                              <p className="text-xs text-slate-500 mt-1">
-                                Can unused leaves be converted to cash?
-                              </p>
+                        {/* Toggles - Only show if not unlimited */}
+                        {!policyItem.is_unlimited && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-200">
+                            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                              <div>
+                                <Label className="font-medium">Encashment Allowed</Label>
+                                <p className="text-xs text-slate-500 mt-1">
+                                  Can unused leaves be converted to cash?
+                                </p>
+                              </div>
+                              <Switch
+                                checked={policyItem.encashment_allowed}
+                                onCheckedChange={(checked) => updatePolicy(index, 'encashment_allowed', checked)}
+                              />
                             </div>
-                            <Switch
-                              checked={policyItem.encashment_allowed}
-                              onCheckedChange={(checked) => updatePolicy(index, 'encashment_allowed', checked)}
-                            />
-                          </div>
 
-                          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                            <div>
-                              <Label className="font-medium">Carry Forward Allowed</Label>
-                              <p className="text-xs text-slate-500 mt-1">
-                                Can unused leaves be carried to next year?
-                              </p>
+                            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                              <div>
+                                <Label className="font-medium">Carry Forward Allowed</Label>
+                                <p className="text-xs text-slate-500 mt-1">
+                                  Can unused leaves be carried to next year?
+                                </p>
+                              </div>
+                              <Switch
+                                checked={policyItem.carry_forward_allowed}
+                                onCheckedChange={(checked) => updatePolicy(index, 'carry_forward_allowed', checked)}
+                              />
                             </div>
-                            <Switch
-                              checked={policyItem.carry_forward_allowed}
-                              onCheckedChange={(checked) => updatePolicy(index, 'carry_forward_allowed', checked)}
-                            />
                           </div>
-                        </div>
+                        )}
 
                         {/* Clubbing Rules */}
                         <div className="pt-4 border-t border-slate-200">

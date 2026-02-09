@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Plus, Trash2, Save, Send, Calendar, Info, ChevronDown, ChevronUp, Calculator, User, Wallet, TreePalm, ClipboardList, TrendingDown, Clock, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { DollarSign, Plus, Trash2, Save, Send, Calendar, Info, ChevronDown, ChevronUp, Calculator, User, Users, Wallet, TreePalm, ClipboardList, TrendingDown, Clock, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { format } from 'date-fns';
@@ -61,14 +62,52 @@ const SalaryStructurePage = () => {
   const [deductUnpaidLeaves, setDeductUnpaidLeaves] = useState(true);
   const [showLeaveDetails, setShowLeaveDetails] = useState(false);
 
-  // Manual deduction rates
-  const [perFullDayDeduction, setPerFullDayDeduction] = useState(0);
-  const [perHalfDayDeduction, setPerHalfDayDeduction] = useState(0);
+  // Deduction rates are now auto-calculated from Basic Pay
+
+  // Dirty state tracking - true when structure modified since last save/load
+  const [isDirty, setIsDirty] = useState(false);
+
+  // Bulk send modal states
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkEmployeeData, setBulkEmployeeData] = useState([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkSendingIds, setBulkSendingIds] = useState(new Set());
+  const [bulkSentIds, setBulkSentIds] = useState(new Set());
+  const [sendingAll, setSendingAll] = useState(false);
 
   const [salaryStructure, setSalaryStructure] = useState({
     basic_salary: 0,
     components: []
   });
+
+
+  // Default CTC earning components
+  const getDefaultCTCComponents = () => [
+    { name: 'Basic Pay', amount: 50, is_percentage: true, calculation_base: 'ctc', type: 'earning', order: 1 },
+    { name: 'House Rent Allowance', amount: 25, is_percentage: true, calculation_base: 'ctc', type: 'earning', order: 2 },
+    { name: 'LTA Allowance', amount: 2.5, is_percentage: true, calculation_base: 'ctc', type: 'earning', order: 3 },
+    { name: 'Other Allowance', amount: 22.5, is_percentage: true, calculation_base: 'ctc', type: 'earning', order: 4 }
+  ];
+
+  // Handle CTC change - auto-fill components as user types
+  const handleCTCChange = (value) => {
+    const ctcAmount = parseFloat(value) || 0;
+    setIsDirty(true);
+
+    if (ctcAmount > 0) {
+      // Keep existing earnings if they exist, otherwise use defaults
+      const existingEarnings = salaryStructure.components.filter(c => c.type === 'earning');
+      const earningComponents = existingEarnings.length > 0 ? existingEarnings : getDefaultCTCComponents();
+      const existingDeductions = salaryStructure.components.filter(c => c.type === 'deduction');
+
+      setSalaryStructure({
+        basic_salary: ctcAmount,
+        components: [...earningComponents, ...existingDeductions]
+      });
+    } else {
+      setSalaryStructure({ ...salaryStructure, basic_salary: ctcAmount });
+    }
+  };
 
   useEffect(() => {
     fetchEmployees();
@@ -250,10 +289,7 @@ const SalaryStructurePage = () => {
     setSelectedEmployeeData(empData);
     setLoading(true);
     setShowAllApplications(false);
-
-    // Reset deduction rates when employee changes
-    setPerFullDayDeduction(0);
-    setPerHalfDayDeduction(0);
+    setIsDirty(false);
 
     // Fetch leave balance for the selected employee
     fetchLeaveBalance(empData);
@@ -261,16 +297,18 @@ const SalaryStructurePage = () => {
     try {
       const response = await api.get(`/salary-structure/${empId}`);
       if (response.data) {
-        setSalaryStructure({
-          basic_salary: response.data.basic_salary || 0,
-          components: response.data.components || []
-        });
+        const components = response.data.components || [];
+        const earningComponents = components.filter(c => c.type === 'earning');
+        const deductionComponents = components.filter(c => c.type === 'deduction');
+        const basicSalary = response.data.basic_salary || 0;
 
-        // Set default deduction rates based on basic salary / 30
-        const basic = response.data.basic_salary || 0;
-        const defaultPerDay = Math.round(basic / 30);
-        setPerFullDayDeduction(defaultPerDay);
-        setPerHalfDayDeduction(Math.round(defaultPerDay / 2));
+        // If no earning components saved, use default CTC percentage components
+        const earnings = earningComponents.length > 0 ? earningComponents : getDefaultCTCComponents();
+
+        setSalaryStructure({
+          basic_salary: basicSalary,
+          components: [...earnings, ...deductionComponents]
+        });
       } else {
         initializeFromTemplate(empData);
       }
@@ -284,46 +322,30 @@ const SalaryStructurePage = () => {
 
   const initializeFromTemplate = (employee) => {
     const basicSalary = employee?.monthly_salary || 0;
-    let initialComponents = [];
 
-    if (salaryTemplate) {
-      if (salaryTemplate.earnings) {
-        initialComponents = initialComponents.concat(
-          salaryTemplate.earnings.map(earning => ({
-            name: earning.name,
-            amount: 0,
-            type: 'earning',
-            is_percentage: false,
-            calculation_base: 'basic'
-          }))
-        );
-      }
+    // Always use the default CTC percentage components for earnings
+    const earningComponents = getDefaultCTCComponents();
 
-      if (salaryTemplate.deductions) {
-        initialComponents = initialComponents.concat(
-          salaryTemplate.deductions.map(deduction => ({
-            name: deduction.name,
-            amount: 0,
-            type: 'deduction',
-            is_percentage: false,
-            calculation_base: 'basic'
-          }))
-        );
-      }
+    // Use template deductions if available
+    let deductionComponents = [];
+    if (salaryTemplate?.deductions) {
+      deductionComponents = salaryTemplate.deductions.map(deduction => ({
+        name: deduction.name,
+        amount: 0,
+        type: 'deduction',
+        is_percentage: false,
+        calculation_base: 'basic'
+      }));
     }
 
     setSalaryStructure({
       basic_salary: basicSalary,
-      components: initialComponents
+      components: [...earningComponents, ...deductionComponents]
     });
-
-    // Set default deduction rates
-    const defaultPerDay = Math.round(basicSalary / 30);
-    setPerFullDayDeduction(defaultPerDay);
-    setPerHalfDayDeduction(Math.round(defaultPerDay / 2));
   };
 
   const addComponent = (type) => {
+    setIsDirty(true);
     setSalaryStructure({
       ...salaryStructure,
       components: [
@@ -340,12 +362,14 @@ const SalaryStructurePage = () => {
   };
 
   const updateComponent = (index, field, value) => {
+    setIsDirty(true);
     const updated = [...salaryStructure.components];
     updated[index][field] = value;
     setSalaryStructure({ ...salaryStructure, components: updated });
   };
 
   const removeComponent = (index) => {
+    setIsDirty(true);
     const updated = salaryStructure.components.filter((_, i) => i !== index);
     setSalaryStructure({ ...salaryStructure, components: updated });
   };
@@ -358,8 +382,18 @@ const SalaryStructurePage = () => {
   const calculateUnpaidDeduction = () => {
     if (!deductUnpaidLeaves) return 0;
 
-    const fullDayDeduction = unpaidFullDays * (parseFloat(perFullDayDeduction) || 0);
-    const halfDayDeduction = unpaidHalfDays * (parseFloat(perHalfDayDeduction) || 0);
+    // Get Basic Pay from components (50% of CTC)
+    const basicPayComponent = salaryStructure.components.find(c => c.name === 'Basic Pay' && c.type === 'earning');
+    const ctc = parseFloat(salaryStructure.basic_salary) || 0;
+    const basicPay = basicPayComponent && basicPayComponent.is_percentage
+      ? (ctc * parseFloat(basicPayComponent.amount)) / 100
+      : ctc * 0.5; // Default to 50% if not found
+
+    const daysInMonth = getDaysInMonth();
+    const perDayDeduction = basicPay / daysInMonth;
+
+    const fullDayDeduction = unpaidFullDays * perDayDeduction;
+    const halfDayDeduction = unpaidHalfDays * (perDayDeduction / 2);
 
     return Math.round(fullDayDeduction + halfDayDeduction);
   };
@@ -369,16 +403,22 @@ const SalaryStructurePage = () => {
   };
 
   const calculateTotals = () => {
-    const basic = parseFloat(salaryStructure.basic_salary) || 0;
-    let totalEarnings = basic;
+    const ctc = parseFloat(salaryStructure.basic_salary) || 0;
+    let totalEarnings = 0;
     let totalDeductions = 0;
 
     salaryStructure.components.forEach(comp => {
       const amount = parseFloat(comp.amount) || 0;
       let calcAmount = amount;
 
-      if (comp.is_percentage && comp.calculation_base === 'basic') {
-        calcAmount = (basic * amount) / 100;
+      if (comp.is_percentage) {
+        if (comp.calculation_base === 'ctc') {
+          // Calculate as percentage of CTC
+          calcAmount = (ctc * amount) / 100;
+        } else if (comp.calculation_base === 'basic') {
+          // Legacy: calculate as percentage of basic
+          calcAmount = (ctc * amount) / 100;
+        }
       }
 
       if (comp.type === 'earning') {
@@ -388,12 +428,12 @@ const SalaryStructurePage = () => {
       }
     });
 
-    const grossSalary = totalEarnings;
+    const grossSalary = totalEarnings || ctc;
     const unpaidDeduction = calculateUnpaidDeduction();
     const finalDeductions = totalDeductions + unpaidDeduction;
 
     return {
-      basic,
+      basic: ctc,
       grossSalary,
       totalDeductions,
       unpaidDeduction,
@@ -409,7 +449,7 @@ const SalaryStructurePage = () => {
     }
 
     if (salaryStructure.basic_salary <= 0) {
-      toast.error('Basic salary must be greater than 0');
+      toast.error('CTC must be greater than 0');
       return;
     }
 
@@ -417,6 +457,7 @@ const SalaryStructurePage = () => {
     try {
       await api.post(`/salary-structure/${selectedEmployee}`, salaryStructure);
       toast.success('Salary structure saved successfully');
+      setIsDirty(false);
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to save');
     } finally {
@@ -433,13 +474,24 @@ const SalaryStructurePage = () => {
     setSending(true);
     try {
       const totals = calculateTotals();
+
+      // Calculate per-day deduction rates based on Basic Pay
+      const basicPayComponent = salaryStructure.components.find(c => c.name === 'Basic Pay' && c.type === 'earning');
+      const ctc = parseFloat(salaryStructure.basic_salary) || 0;
+      const basicPay = basicPayComponent && basicPayComponent.is_percentage
+        ? (ctc * parseFloat(basicPayComponent.amount)) / 100
+        : ctc * 0.5;
+      const daysInMonth = getDaysInMonth();
+      const perDayDeduction = basicPay / daysInMonth;
+      const perHalfDayDeduction = perDayDeduction / 2;
+
       await api.post('/payroll/send-detailed-salary-slip', {
         employee_id: selectedEmployee,
         month: selectedMonth,
         unpaid_full_days: deductUnpaidLeaves ? unpaidFullDays : 0,
         unpaid_half_days: deductUnpaidLeaves ? unpaidHalfDays : 0,
-        per_full_day_deduction: deductUnpaidLeaves ? parseFloat(perFullDayDeduction) || 0 : 0,
-        per_half_day_deduction: deductUnpaidLeaves ? parseFloat(perHalfDayDeduction) || 0 : 0,
+        per_full_day_deduction: deductUnpaidLeaves ? Math.round(perDayDeduction) : 0,
+        per_half_day_deduction: deductUnpaidLeaves ? Math.round(perHalfDayDeduction) : 0,
         unpaid_leave_deduction: deductUnpaidLeaves ? totals.unpaidDeduction : 0
       });
       toast.success('Salary slip sent successfully');
@@ -448,6 +500,142 @@ const SalaryStructurePage = () => {
     } finally {
       setSending(false);
     }
+  };
+
+  // Bulk send modal functions
+  const openBulkModal = async () => {
+    setShowBulkModal(true);
+    setBulkLoading(true);
+    setBulkSentIds(new Set());
+    setBulkSendingIds(new Set());
+
+    try {
+      const results = await Promise.all(
+        employees.map(async (emp) => {
+          try {
+            const res = await api.get(`/salary-structure/${emp.employee_id || emp.id}`);
+            const structure = res.data;
+            const hasSavedStructure = structure && structure.components && structure.components.length > 0 && structure.basic_salary > 0;
+
+            let grossSalary = 0;
+            let totalDeductions = 0;
+            const ctc = structure?.basic_salary || 0;
+
+            if (hasSavedStructure) {
+              structure.components.forEach(comp => {
+                const amount = parseFloat(comp.amount) || 0;
+                let calcAmount = amount;
+                if (comp.is_percentage) {
+                  calcAmount = (ctc * amount) / 100;
+                }
+                if (comp.type === 'earning') grossSalary += calcAmount;
+                else totalDeductions += calcAmount;
+              });
+            }
+
+            return {
+              employee: emp,
+              structure,
+              hasSavedStructure,
+              ctc,
+              grossSalary: grossSalary || ctc,
+              totalDeductions,
+              netSalary: (grossSalary || ctc) - totalDeductions
+            };
+          } catch {
+            return {
+              employee: emp,
+              structure: null,
+              hasSavedStructure: false,
+              ctc: 0,
+              grossSalary: 0,
+              totalDeductions: 0,
+              netSalary: 0
+            };
+          }
+        })
+      );
+
+      setBulkEmployeeData(results);
+    } catch (error) {
+      toast.error('Failed to load employee salary data');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleBulkSendSingle = async (empData) => {
+    const empId = empData.employee.employee_id || empData.employee.id;
+    setBulkSendingIds(prev => new Set([...prev, empId]));
+
+    try {
+      await api.post('/payroll/send-detailed-salary-slip', {
+        employee_id: empId,
+        month: selectedMonth,
+        unpaid_full_days: 0,
+        unpaid_half_days: 0,
+        per_full_day_deduction: 0,
+        per_half_day_deduction: 0,
+        unpaid_leave_deduction: 0
+      });
+      setBulkSentIds(prev => new Set([...prev, empId]));
+      toast.success(`Salary slip sent to ${empData.employee.full_name}`);
+    } catch (error) {
+      toast.error(`Failed to send to ${empData.employee.full_name}`);
+    } finally {
+      setBulkSendingIds(prev => {
+        const next = new Set(prev);
+        next.delete(empId);
+        return next;
+      });
+    }
+  };
+
+  const handleBulkSendAll = async () => {
+    const eligibleEmployees = bulkEmployeeData.filter(d => {
+      const empId = d.employee.employee_id || d.employee.id;
+      return d.hasSavedStructure && !bulkSentIds.has(empId);
+    });
+
+    if (eligibleEmployees.length === 0) {
+      toast.error('No eligible employees to send to');
+      return;
+    }
+
+    setSendingAll(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const empData of eligibleEmployees) {
+      const empId = empData.employee.employee_id || empData.employee.id;
+      setBulkSendingIds(prev => new Set([...prev, empId]));
+
+      try {
+        await api.post('/payroll/send-detailed-salary-slip', {
+          employee_id: empId,
+          month: selectedMonth,
+          unpaid_full_days: 0,
+          unpaid_half_days: 0,
+          per_full_day_deduction: 0,
+          per_half_day_deduction: 0,
+          unpaid_leave_deduction: 0
+        });
+        setBulkSentIds(prev => new Set([...prev, empId]));
+        successCount++;
+      } catch {
+        failCount++;
+      } finally {
+        setBulkSendingIds(prev => {
+          const next = new Set(prev);
+          next.delete(empId);
+          return next;
+        });
+      }
+    }
+
+    setSendingAll(false);
+    if (successCount > 0) toast.success(`Sent salary slips to ${successCount} employee${successCount !== 1 ? 's' : ''}`);
+    if (failCount > 0) toast.error(`Failed to send to ${failCount} employee${failCount !== 1 ? 's' : ''}`);
   };
 
   // Helper to get formatted leave balance entries (excluding zero-balance and unpaid)
@@ -494,6 +682,10 @@ const SalaryStructurePage = () => {
   };
 
   const totals = calculateTotals();
+  const hasEarningComponents = salaryStructure.components.some(c => c.type === 'earning');
+  const earningsMismatch = hasEarningComponents && totals.basic > 0 && Math.round(totals.grossSalary) !== Math.round(totals.basic);
+  const mismatchAmount = Math.round(totals.grossSalary) - Math.round(totals.basic);
+
   const monthName = selectedMonth ? format(new Date(selectedMonth + '-01'), 'MMMM yyyy') : '';
   const visibleApplications = showAllApplications
     ? leaveSummary.applications
@@ -524,10 +716,9 @@ const SalaryStructurePage = () => {
               <Info className="w-5 h-5 text-blue-600" />
             </div>
             <div className="text-sm text-blue-900">
-              <p className="font-semibold mb-1">About Salary Components</p>
+              <p className="font-semibold mb-1">About CTC & Salary Structure</p>
               <p>
-                When you select an employee for the first time, the system automatically loads the
-                <strong> Salary Template</strong>. You can customize amounts for each component and configure unpaid leave deductions.
+                Enter the employee's monthly <strong>CTC (Cost to Company)</strong> and salary components will <strong>auto-fill automatically</strong> with the breakdown (Basic Pay 50%, HRA 25%, LTA 2.5%, Other 22.5%). You can edit these after auto-fill. Unpaid leave deductions are automatically calculated based on <strong>Basic Pay ÷ Days in Month</strong>.
               </p>
             </div>
           </div>
@@ -541,7 +732,7 @@ const SalaryStructurePage = () => {
                 <div className="p-2 bg-slate-200 rounded-lg">
                   <User className="w-5 h-5 text-slate-700" />
                 </div>
-                <CardTitle className="text-xl">Configure Salary Components</CardTitle>
+                <CardTitle className="text-xl">Configure CTC & Deductions</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
@@ -581,21 +772,26 @@ const SalaryStructurePage = () => {
 
               {selectedEmployee && !loading && (
                 <>
-                  {/* Basic Salary Card */}
+                  {/* CTC Card */}
                   <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-5 shadow-lg">
                     <div className="flex items-center gap-3 mb-3">
                       <div className="p-2 bg-white/20 rounded-lg">
                         <Wallet className="w-5 h-5 text-white" />
                       </div>
-                      <Label className="text-lg font-semibold text-white">Basic Salary</Label>
+                      <div>
+                        <Label className="text-lg font-semibold text-white">CTC</Label>
+                        <p className="text-xs text-white/60">Cost to Company (Monthly) - Components auto-fill below</p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-3xl font-bold text-white/60">₹</span>
                       <Input
                         type="number"
                         value={salaryStructure.basic_salary}
-                        onChange={(e) => setSalaryStructure({ ...salaryStructure, basic_salary: parseFloat(e.target.value) || 0 })}
+                        onChange={(e) => handleCTCChange(e.target.value)}
+                        onWheel={(e) => e.target.blur()}
                         className="text-2xl font-bold h-14 bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-white/40 focus:ring-white/20"
+                        placeholder="Enter monthly CTC"
                       />
                     </div>
                   </div>
@@ -641,169 +837,154 @@ const SalaryStructurePage = () => {
                         </div>
                       </div>
 
-                      {/* Manual Deduction Rate Inputs */}
-                      {deductUnpaidLeaves && (unpaidFullDays > 0 || unpaidHalfDays > 0) && (
-                        <div className="mt-5 pt-5 border-t border-amber-200 space-y-4">
-                          <div>
-                            <Label className="text-sm font-semibold text-amber-800 mb-3 block">
-                              Configure Deduction Rates
-                            </Label>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {/* Per Full Day Deduction */}
-                              <div className="p-4 bg-white rounded-xl border border-amber-200 shadow-sm">
-                                <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                                  Per Full Day Deduction
-                                </Label>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-lg font-bold text-amber-600">₹</span>
-                                  <Input
-                                    type="number"
-                                    value={perFullDayDeduction}
-                                    onChange={(e) => setPerFullDayDeduction(parseFloat(e.target.value) || 0)}
-                                    className="bg-amber-50 border-amber-200 focus:border-amber-400 focus:ring-amber-200 font-semibold"
-                                    placeholder="Enter amount"
-                                  />
-                                </div>
-                                <p className="text-xs text-slate-500 mt-2">
-                                  Applied to {unpaidFullDays} full day{unpaidFullDays !== 1 ? 's' : ''}
-                                </p>
-                              </div>
+                      {/* Auto-Calculated Deduction Info */}
+                      {deductUnpaidLeaves && (unpaidFullDays > 0 || unpaidHalfDays > 0) && (() => {
+                        const basicPayComponent = salaryStructure.components.find(c => c.name === 'Basic Pay' && c.type === 'earning');
+                        const ctc = parseFloat(salaryStructure.basic_salary) || 0;
+                        const basicPay = basicPayComponent && basicPayComponent.is_percentage
+                          ? (ctc * parseFloat(basicPayComponent.amount)) / 100
+                          : ctc * 0.5;
+                        const daysInMonth = getDaysInMonth();
+                        const perDayDeduction = basicPay / daysInMonth;
+                        const perHalfDayRate = perDayDeduction / 2;
 
-                              {/* Per Half Day Deduction */}
-                              <div className="p-4 bg-white rounded-xl border border-amber-200 shadow-sm">
-                                <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                                  Per Half Day Deduction
-                                </Label>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-lg font-bold text-amber-600">₹</span>
-                                  <Input
-                                    type="number"
-                                    value={perHalfDayDeduction}
-                                    onChange={(e) => setPerHalfDayDeduction(parseFloat(e.target.value) || 0)}
-                                    className="bg-amber-50 border-amber-200 focus:border-amber-400 focus:ring-amber-200 font-semibold"
-                                    placeholder="Enter amount"
-                                  />
+                        return (
+                          <div className="mt-5 pt-5 border-t border-amber-200 space-y-4">
+                            {/* Calculation Info */}
+                            <div className="p-4 bg-white rounded-xl border border-amber-200 shadow-sm">
+                              <div className="text-xs text-amber-700 font-semibold mb-3 uppercase tracking-wide">Deduction Calculation</div>
+                              <div className="space-y-3">
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-slate-600">Basic Pay (50% of CTC):</span>
+                                  <span className="font-semibold text-slate-800">₹{Math.round(basicPay).toLocaleString()}</span>
                                 </div>
-                                <p className="text-xs text-slate-500 mt-2">
-                                  Applied to {unpaidHalfDays} half day{unpaidHalfDays !== 1 ? 's' : ''}
-                                </p>
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-slate-600">Days in {monthName}:</span>
+                                  <span className="font-semibold text-slate-800">{daysInMonth} days</span>
+                                </div>
+                                <div className="flex justify-between text-sm pt-2 border-t border-amber-100">
+                                  <span className="text-slate-600">Per Day Rate:</span>
+                                  <span className="font-semibold text-amber-700">₹{Math.round(perDayDeduction).toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-slate-600">Per Half Day Rate:</span>
+                                  <span className="font-semibold text-amber-700">₹{Math.round(perHalfDayRate).toLocaleString()}</span>
+                                </div>
                               </div>
                             </div>
-                          </div>
 
-                          {/* Calculation Preview */}
-                          <div className="p-4 bg-white rounded-xl border border-amber-200 shadow-sm">
-                            <div className="text-xs text-amber-700 font-semibold mb-3 uppercase tracking-wide">Calculation Preview</div>
-                            <div className="space-y-2">
-                              {unpaidFullDays > 0 && (
-                                <div className="flex justify-between text-sm">
-                                  <span className="text-slate-600">Full Days ({unpaidFullDays} × ₹{parseFloat(perFullDayDeduction).toLocaleString()}):</span>
-                                  <span className="font-semibold text-slate-800">
-                                    ₹{(unpaidFullDays * (parseFloat(perFullDayDeduction) || 0)).toLocaleString()}
-                                  </span>
-                                </div>
-                              )}
-                              {unpaidHalfDays > 0 && (
-                                <div className="flex justify-between text-sm">
-                                  <span className="text-slate-600">Half Days ({unpaidHalfDays} × ₹{parseFloat(perHalfDayDeduction).toLocaleString()}):</span>
-                                  <span className="font-semibold text-slate-800">
-                                    ₹{(unpaidHalfDays * (parseFloat(perHalfDayDeduction) || 0)).toLocaleString()}
-                                  </span>
-                                </div>
-                              )}
-                              <div className="flex justify-between pt-3 mt-2 border-t border-amber-100">
-                                <span className="font-semibold text-amber-800">Total Deduction:</span>
-                                <span className="font-bold text-lg text-amber-700">₹{totals.unpaidDeduction.toLocaleString()}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Show Leave Details Toggle */}
-                          <button
-                            type="button"
-                            onClick={() => setShowLeaveDetails(!showLeaveDetails)}
-                            className="flex items-center gap-2 text-sm text-amber-700 hover:text-amber-800 transition-colors font-medium"
-                          >
-                            {showLeaveDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                            {showLeaveDetails ? 'Hide' : 'View'} Leave Details
-                          </button>
-
-                          {/* Leave Details */}
-                          {showLeaveDetails && unpaidLeaves.length > 0 && (
-                            <div className="space-y-2 animate-in slide-in-from-top-2 duration-200">
-                              {unpaidLeaves.map((leave, idx) => (
-                                <div key={idx} className="p-4 bg-white rounded-xl border border-amber-100 shadow-sm">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className="font-medium text-slate-700">
-                                      {leave.dates?.length} day{leave.dates?.length !== 1 ? 's' : ''}
-                                      {leave.is_half_day && <span className="text-amber-600 ml-1">(Half Day)</span>}
+                            {/* Deduction Breakdown */}
+                            <div className="p-4 bg-white rounded-xl border border-amber-200 shadow-sm">
+                              <div className="text-xs text-amber-700 font-semibold mb-3 uppercase tracking-wide">Deduction Breakdown</div>
+                              <div className="space-y-2">
+                                {unpaidFullDays > 0 && (
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-slate-600">Full Days ({unpaidFullDays} × ₹{Math.round(perDayDeduction).toLocaleString()}):</span>
+                                    <span className="font-semibold text-slate-800">
+                                      ₹{Math.round(unpaidFullDays * perDayDeduction).toLocaleString()}
                                     </span>
-                                    <Badge variant="outline" className="capitalize text-xs">
-                                      {leave.status?.replace('_', ' ')}
-                                    </Badge>
                                   </div>
-                                  <p className="text-slate-500 text-sm mb-2">{leave.reason}</p>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {leave.dates?.map((date, i) => (
-                                      <span key={i} className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium">
-                                        {format(new Date(date), 'MMM dd')}
-                                      </span>
-                                    ))}
+                                )}
+                                {unpaidHalfDays > 0 && (
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-slate-600">Half Days ({unpaidHalfDays} × ₹{Math.round(perHalfDayRate).toLocaleString()}):</span>
+                                    <span className="font-semibold text-slate-800">
+                                      ₹{Math.round(unpaidHalfDays * perHalfDayRate).toLocaleString()}
+                                    </span>
                                   </div>
+                                )}
+                                <div className="flex justify-between pt-3 mt-2 border-t border-amber-100">
+                                  <span className="font-semibold text-amber-800">Total Deduction:</span>
+                                  <span className="font-bold text-lg text-amber-700">₹{totals.unpaidDeduction.toLocaleString()}</span>
                                 </div>
-                              ))}
+                              </div>
                             </div>
-                          )}
-                        </div>
-                      )}
+
+                            {/* Show Leave Details Toggle */}
+                            <button
+                              type="button"
+                              onClick={() => setShowLeaveDetails(!showLeaveDetails)}
+                              className="flex items-center gap-2 text-sm text-amber-700 hover:text-amber-800 transition-colors font-medium"
+                            >
+                              {showLeaveDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              {showLeaveDetails ? 'Hide' : 'View'} Leave Details
+                            </button>
+
+                            {/* Leave Details */}
+                            {showLeaveDetails && unpaidLeaves.length > 0 && (
+                              <div className="space-y-2 animate-in slide-in-from-top-2 duration-200">
+                                {unpaidLeaves.map((leave, idx) => (
+                                  <div key={idx} className="p-4 bg-white rounded-xl border border-amber-100 shadow-sm">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="font-medium text-slate-700">
+                                        {leave.dates?.length} day{leave.dates?.length !== 1 ? 's' : ''}
+                                        {leave.is_half_day && <span className="text-amber-600 ml-1">(Half Day)</span>}
+                                      </span>
+                                      <Badge variant="outline" className="capitalize text-xs">
+                                        {leave.status?.replace('_', ' ')}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-slate-500 text-sm mb-2">{leave.reason}</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {leave.dates?.map((date, i) => (
+                                        <span key={i} className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium">
+                                          {format(new Date(date), 'MMM dd')}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
-                  {/* Earnings Section */}
+                  {/* Salary Components Section */}
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-3">
                         <div className="w-1.5 h-8 bg-emerald-500 rounded-full"></div>
-                        <h3 className="text-xl font-bold text-slate-800">Earnings</h3>
+                        <div>
+                          <h3 className="text-xl font-bold text-slate-800">Salary Components</h3>
+                          <p className="text-xs text-slate-500">Breakdown of CTC (auto-filled, editable)</p>
+                        </div>
                         <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-medium">
                           {salaryStructure.components.filter(c => c.type === 'earning').length} items
                         </Badge>
                       </div>
-                      <Button
-                        size="sm"
-                        onClick={() => addComponent('earning')}
-                        className="bg-emerald-600 hover:bg-emerald-700 rounded-full shadow-md"
-                      >
-                        <Plus className="w-4 h-4 mr-1" />
-                        Add Earning
-                      </Button>
                     </div>
 
                     <div className="space-y-3">
                       {salaryStructure.components.filter(c => c.type === 'earning').map((comp, idx) => {
                         const actualIdx = salaryStructure.components.indexOf(comp);
+                        const ctc = parseFloat(salaryStructure.basic_salary) || 0;
                         const calcAmount = comp.is_percentage
-                          ? Math.round((totals.basic * (parseFloat(comp.amount) || 0)) / 100)
+                          ? Math.round((ctc * (parseFloat(comp.amount) || 0)) / 100)
                           : parseFloat(comp.amount) || 0;
 
                         return (
-                          <div key={actualIdx} className="border border-emerald-200 rounded-xl p-4 bg-gradient-to-r from-emerald-50/50 to-green-50/50 hover:shadow-md transition-all duration-200">
+                          <div key={actualIdx} className="border border-emerald-200 rounded-xl p-4 bg-gradient-to-r from-emerald-50/50 to-green-50/50">
                             <div className="grid grid-cols-12 gap-3 items-center">
-                              <div className="col-span-12 md:col-span-4">
+                              <div className="col-span-12 md:col-span-5">
                                 <Input
                                   placeholder="Component name"
                                   value={comp.name}
                                   onChange={(e) => updateComponent(actualIdx, 'name', e.target.value)}
                                   className="bg-white border-emerald-200 focus:border-emerald-400 focus:ring-emerald-200"
+                                  readOnly={['Basic Pay', 'House Rent Allowance', 'LTA Allowance', 'Other Allowance'].includes(comp.name)}
                                 />
                               </div>
-                              <div className="col-span-5 md:col-span-3">
+                              <div className="col-span-6 md:col-span-3">
                                 <div className="relative">
                                   <Input
                                     type="number"
                                     placeholder="Amount"
                                     value={comp.amount}
                                     onChange={(e) => updateComponent(actualIdx, 'amount', parseFloat(e.target.value) || 0)}
+                                    onWheel={(e) => e.target.blur()}
                                     className="bg-white border-emerald-200 focus:border-emerald-400 focus:ring-emerald-200 pr-8"
                                   />
                                   {comp.is_percentage && (
@@ -811,34 +992,29 @@ const SalaryStructurePage = () => {
                                   )}
                                 </div>
                               </div>
-                              <div className="col-span-4 md:col-span-2">
+                              <div className="col-span-6 md:col-span-2">
                                 <Select
                                   value={comp.is_percentage ? 'percentage' : 'fixed'}
-                                  onValueChange={(val) => updateComponent(actualIdx, 'is_percentage', val === 'percentage')}
+                                  onValueChange={(val) => {
+                                    updateComponent(actualIdx, 'is_percentage', val === 'percentage');
+                                    if (val === 'percentage') {
+                                      updateComponent(actualIdx, 'calculation_base', 'ctc');
+                                    }
+                                  }}
                                 >
                                   <SelectTrigger className="bg-white border-emerald-200">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="fixed">Fixed ₹</SelectItem>
-                                    <SelectItem value="percentage">% Basic</SelectItem>
+                                    <SelectItem value="percentage">% of CTC</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
-                              <div className="col-span-2 md:col-span-2 text-right">
+                              <div className="col-span-12 md:col-span-2 text-right">
                                 <span className="text-base font-bold text-emerald-700">
-                                  +₹{calcAmount.toLocaleString()}
+                                  = ₹{calcAmount.toLocaleString()}
                                 </span>
-                              </div>
-                              <div className="col-span-1">
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => removeComponent(actualIdx)}
-                                  className="text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
                               </div>
                             </div>
                           </div>
@@ -847,9 +1023,9 @@ const SalaryStructurePage = () => {
 
                       {salaryStructure.components.filter(c => c.type === 'earning').length === 0 && (
                         <div className="text-center py-10 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
-                          <Plus className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                          <p className="font-medium">No earnings added</p>
-                          <p className="text-sm">Click "Add Earning" to create one</p>
+                          <Calculator className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          <p className="font-medium">No salary components</p>
+                          <p className="text-sm">Enter CTC above to auto-fill components</p>
                         </div>
                       )}
                     </div>
@@ -901,6 +1077,7 @@ const SalaryStructurePage = () => {
                                     placeholder="Amount"
                                     value={comp.amount}
                                     onChange={(e) => updateComponent(actualIdx, 'amount', parseFloat(e.target.value) || 0)}
+                                    onWheel={(e) => e.target.blur()}
                                     className="bg-white border-red-200 focus:border-red-400 focus:ring-red-200 pr-8"
                                   />
                                   {comp.is_percentage && (
@@ -952,14 +1129,35 @@ const SalaryStructurePage = () => {
                     </div>
                   </div>
 
+                  {/* Earnings Mismatch Error */}
+                  {earningsMismatch && (
+                    <div className="flex items-start gap-3 p-4 bg-red-50 border-2 border-red-300 rounded-xl animate-in slide-in-from-top-2 duration-200">
+                      <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-red-800">
+                          Salary components don't add up to CTC
+                        </p>
+                        <p className="text-sm text-red-700 mt-1">
+                          {mismatchAmount > 0
+                            ? <>Total earnings <strong>₹{Math.round(totals.grossSalary).toLocaleString()}</strong> exceed CTC <strong>₹{totals.basic.toLocaleString()}</strong> by <strong>₹{mismatchAmount.toLocaleString()}</strong>.</>
+                            : <>Total earnings <strong>₹{Math.round(totals.grossSalary).toLocaleString()}</strong> are <strong>₹{Math.abs(mismatchAmount).toLocaleString()}</strong> less than CTC <strong>₹{totals.basic.toLocaleString()}</strong>.</>
+                          }
+                        </p>
+                        <p className="text-xs text-red-600 mt-2">
+                          Adjust the component amounts or percentages so they add up to the CTC.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Save Button */}
                   <Button
                     onClick={handleSave}
-                    disabled={saving}
-                    className="w-full h-12 bg-slate-800 hover:bg-slate-900 text-lg font-semibold rounded-xl shadow-lg transition-all duration-200 hover:shadow-xl"
+                    disabled={saving || earningsMismatch}
+                    className={`w-full h-12 text-lg font-semibold rounded-xl shadow-lg transition-all duration-200 hover:shadow-xl ${earningsMismatch ? 'bg-red-300 hover:bg-red-300 cursor-not-allowed' : 'bg-slate-800 hover:bg-slate-900'}`}
                   >
                     <Save className="w-5 h-5 mr-2" />
-                    {saving ? 'Saving...' : 'Save Salary Structure'}
+                    {saving ? 'Saving...' : earningsMismatch ? 'Fix Components to Save' : 'Save Salary Structure'}
                   </Button>
                 </>
               )}
@@ -1018,14 +1216,22 @@ const SalaryStructurePage = () => {
 
                     {/* Salary Breakdown */}
                     <div className="space-y-3">
-                      <div className="flex justify-between py-3 px-4 bg-slate-50 rounded-xl">
-                        <span className="text-slate-600">Basic Salary</span>
+                      <div className="flex justify-between py-3 px-4 bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl border border-slate-200">
+                        <span className="text-slate-600 font-medium">CTC (Monthly)</span>
                         <span className="font-bold text-slate-800">₹{totals.basic.toLocaleString()}</span>
                       </div>
 
-                      <div className="flex justify-between py-3 px-4 bg-emerald-50 rounded-xl border border-emerald-100">
-                        <span className="text-emerald-700 font-medium">Gross Salary</span>
-                        <span className="font-bold text-emerald-700">₹{totals.grossSalary.toLocaleString()}</span>
+                      <div className={`flex justify-between py-3 px-4 rounded-xl border ${earningsMismatch ? 'bg-red-50 border-red-300' : 'bg-emerald-50 border-emerald-100'}`}>
+                        <div>
+                          <span className={`font-medium ${earningsMismatch ? 'text-red-700' : 'text-emerald-700'}`}>Gross Salary</span>
+                          {earningsMismatch && (
+                            <p className="text-xs text-red-600 mt-0.5 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              {mismatchAmount > 0 ? `₹${mismatchAmount.toLocaleString()} over CTC` : `₹${Math.abs(mismatchAmount).toLocaleString()} under CTC`}
+                            </p>
+                          )}
+                        </div>
+                        <span className={`font-bold ${earningsMismatch ? 'text-red-700' : 'text-emerald-700'}`}>₹{Math.round(totals.grossSalary).toLocaleString()}</span>
                       </div>
 
                       <div className="flex justify-between py-3 px-4 bg-red-50 rounded-xl border border-red-100">
@@ -1052,16 +1258,26 @@ const SalaryStructurePage = () => {
                     </div>
 
                     {/* Send Slip Section */}
-                    <div className="pt-4 border-t border-slate-100">
-                      <div className="p-5 bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl border border-emerald-200">
-                        <h4 className="font-semibold text-emerald-800 mb-3 flex items-center gap-2">
+                    <div className="pt-4 border-t border-slate-100 space-y-4">
+                      <div className={`p-5 rounded-xl border ${isDirty ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-300' : 'bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-200'}`}>
+                        <h4 className={`font-semibold mb-3 flex items-center gap-2 ${isDirty ? 'text-amber-800' : 'text-emerald-800'}`}>
                           <Send className="w-4 h-4" />
                           Send Salary Slip
                         </h4>
+
+                        {isDirty && (
+                          <div className="flex items-center gap-2 p-3 mb-3 bg-amber-100 border border-amber-300 rounded-lg">
+                            <AlertTriangle className="w-4 h-4 text-amber-700 flex-shrink-0" />
+                            <p className="text-sm font-medium text-amber-800">
+                              Save the salary structure first before sending the slip.
+                            </p>
+                          </div>
+                        )}
+
                         <Button
                           onClick={handleSendSlip}
-                          disabled={sending || !selectedEmployee}
-                          className="w-full bg-emerald-600 hover:bg-emerald-700 h-11 font-semibold shadow-md"
+                          disabled={sending || !selectedEmployee || isDirty}
+                          className={`w-full h-11 font-semibold shadow-md ${isDirty ? 'bg-slate-400 hover:bg-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}
                         >
                           {sending ? (
                             <>
@@ -1075,9 +1291,25 @@ const SalaryStructurePage = () => {
                             </>
                           )}
                         </Button>
-                        <p className="text-xs text-emerald-600 mt-2 text-center">
-                          Salary slip will be sent via email
+                        <p className={`text-xs mt-2 text-center ${isDirty ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {isDirty ? 'Please save changes before sending' : 'Salary slip will be sent via email'}
                         </p>
+                      </div>
+
+                      {/* Send to All Employees */}
+                      <div className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                        <h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                          <Users className="w-4 h-4" />
+                          Bulk Salary Slips
+                        </h4>
+                        <p className="text-xs text-blue-600 mb-3">Send salary slips to all employees for {monthName}</p>
+                        <Button
+                          onClick={openBulkModal}
+                          className="w-full bg-blue-600 hover:bg-blue-700 h-11 font-semibold shadow-md"
+                        >
+                          <Users className="w-4 h-4 mr-2" />
+                          Send to All Employees
+                        </Button>
                       </div>
                     </div>
                   </>
@@ -1378,7 +1610,7 @@ const SalaryStructurePage = () => {
                       <p className="text-2xl font-bold text-emerald-700">
                         {salaryStructure.components.filter(c => c.type === 'earning').length}
                       </p>
-                      <p className="text-xs text-emerald-600 font-medium">Earnings</p>
+                      <p className="text-xs text-emerald-600 font-medium">Components</p>
                     </div>
                     <div className="p-4 bg-gradient-to-br from-red-50 to-rose-50 rounded-xl text-center border border-red-100">
                       <p className="text-2xl font-bold text-red-700">
@@ -1404,6 +1636,173 @@ const SalaryStructurePage = () => {
             )}
           </div>
         </div>
+
+        {/* Bulk Send Modal */}
+        <Dialog open={showBulkModal} onOpenChange={setShowBulkModal}>
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-3 text-xl">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Mail className="w-5 h-5 text-blue-700" />
+                </div>
+                Send Salary Slips - {monthName}
+              </DialogTitle>
+              <DialogDescription>
+                Review and send salary slips to employees. Employees without a saved salary structure cannot receive slips.
+              </DialogDescription>
+            </DialogHeader>
+
+            {bulkLoading ? (
+              <div className="flex flex-col items-center justify-center py-16">
+                <div className="animate-spin w-10 h-10 border-4 border-slate-200 border-t-blue-600 rounded-full mb-4"></div>
+                <p className="text-slate-500 font-medium">Loading employee salary data...</p>
+              </div>
+            ) : (
+              <>
+                {/* Send All Button */}
+                <div className="flex items-center justify-between py-3 px-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                  <div>
+                    <p className="text-sm font-semibold text-blue-800">
+                      {bulkEmployeeData.filter(d => d.hasSavedStructure).length} of {bulkEmployeeData.length} employees ready
+                    </p>
+                    <p className="text-xs text-blue-600">
+                      {bulkSentIds.size > 0 && `${bulkSentIds.size} already sent`}
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleBulkSendAll}
+                    disabled={sendingAll || bulkEmployeeData.filter(d => d.hasSavedStructure && !bulkSentIds.has(d.employee.employee_id || d.employee.id)).length === 0}
+                    className="bg-blue-600 hover:bg-blue-700 font-semibold shadow-md"
+                  >
+                    {sendingAll ? (
+                      <>
+                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" />
+                        Send to All
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {/* Employee List */}
+                <div className="overflow-y-auto flex-1 space-y-2 pr-1 -mr-1">
+                  {bulkEmployeeData.map((empData) => {
+                    const empId = empData.employee.employee_id || empData.employee.id;
+                    const isSending = bulkSendingIds.has(empId);
+                    const isSent = bulkSentIds.has(empId);
+                    const isDisabled = !empData.hasSavedStructure || isSending || sendingAll;
+
+                    return (
+                      <div
+                        key={empId}
+                        className={`p-4 rounded-xl border transition-all duration-200 ${
+                          isSent
+                            ? 'bg-emerald-50 border-emerald-200'
+                            : !empData.hasSavedStructure
+                              ? 'bg-slate-50 border-slate-200 opacity-60'
+                              : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-4">
+                          {/* Employee Info */}
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0 ${
+                              isSent
+                                ? 'bg-emerald-500'
+                                : !empData.hasSavedStructure
+                                  ? 'bg-slate-400'
+                                  : 'bg-gradient-to-br from-slate-700 to-slate-900'
+                            }`}>
+                              {isSent ? <CheckCircle2 className="w-5 h-5" /> : empData.employee.full_name?.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-slate-800 text-sm truncate">{empData.employee.full_name}</p>
+                              <p className="text-xs text-slate-500 truncate">
+                                {empData.employee.department || 'No Dept'}
+                                {empData.employee.employee_id && ` · ${empData.employee.employee_id}`}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Salary Preview */}
+                          <div className="hidden sm:flex items-center gap-4 text-right flex-shrink-0">
+                            {empData.hasSavedStructure ? (
+                              <>
+                                <div>
+                                  <p className="text-xs text-slate-500">CTC</p>
+                                  <p className="text-sm font-bold text-slate-700">₹{empData.ctc.toLocaleString()}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-slate-500">Net</p>
+                                  <p className="text-sm font-bold text-emerald-700">₹{Math.round(empData.netSalary).toLocaleString()}</p>
+                                </div>
+                              </>
+                            ) : (
+                              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
+                                <AlertTriangle className="w-3 h-3 mr-1" />
+                                Not Configured
+                              </Badge>
+                            )}
+                          </div>
+
+                          {/* Send Button */}
+                          <div className="flex-shrink-0">
+                            {isSent ? (
+                              <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
+                                <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                                Sent
+                              </Badge>
+                            ) : (
+                              <Button
+                                size="sm"
+                                onClick={() => handleBulkSendSingle(empData)}
+                                disabled={isDisabled}
+                                className={`font-medium ${
+                                  !empData.hasSavedStructure
+                                    ? 'bg-slate-300 hover:bg-slate-300 cursor-not-allowed text-slate-500'
+                                    : 'bg-blue-600 hover:bg-blue-700'
+                                }`}
+                                title={!empData.hasSavedStructure ? 'Salary structure not saved' : ''}
+                              >
+                                {isSending ? (
+                                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                                ) : (
+                                  <>
+                                    <Send className="w-3.5 h-3.5 mr-1" />
+                                    Send
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Mobile salary info */}
+                        {empData.hasSavedStructure && (
+                          <div className="flex sm:hidden items-center gap-4 mt-2 pt-2 border-t border-slate-100">
+                            <span className="text-xs text-slate-500">CTC: <strong className="text-slate-700">₹{empData.ctc.toLocaleString()}</strong></span>
+                            <span className="text-xs text-slate-500">Net: <strong className="text-emerald-700">₹{Math.round(empData.netSalary).toLocaleString()}</strong></span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {bulkEmployeeData.length === 0 && !bulkLoading && (
+                    <div className="text-center py-12 text-slate-400">
+                      <Users className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                      <p className="font-medium">No employees found</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

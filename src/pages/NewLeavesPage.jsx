@@ -74,7 +74,8 @@ const LeavesPage = () => {
           creditType: policy.credit_type || 'annually',
           monthlyCredit: policy.monthly_credit || 0,
           advanceDaysRequired: policy.advance_days_required || 0,
-          clubbingNotAllowedWith: policy.clubbing_not_allowed_with || []
+          clubbingNotAllowedWith: policy.clubbing_not_allowed_with || [],
+          isUnlimited: policy.is_unlimited || false
         };
       });
 
@@ -216,7 +217,7 @@ const LeavesPage = () => {
     Object.keys(usage).forEach(type => {
       const typeInfo = leaveTypes.find(t => t.name === type);
       usage[type].available = typeInfo?.available ?? 0;
-      usage[type].isUnpaid = type.toLowerCase().includes('unpaid');
+      usage[type].isUnpaid = typeInfo?.isUnlimited || false;
       usage[type].sufficient = usage[type].isUnpaid || usage[type].available >= usage[type].days;
     });
 
@@ -1292,9 +1293,9 @@ const LeavesPage = () => {
         ) : (
           leaveTypes.map(type => {
             const isCompOff = type.isCompOff;
-            const isUnpaid = type.name === 'Unpaid Leave';
-            const isLow = type.available < 3 && type.available > 0 && !isCompOff && !isUnpaid;
-            const isEmpty = type.available === 0 && !isUnpaid;
+            const isUnlimited = type.isUnlimited || false;
+            const isLow = type.available < 3 && type.available > 0 && !isCompOff && !isUnlimited;
+            const isEmpty = type.available === 0 && !isUnlimited;
             const isMonthly = type.creditType === 'monthly';
             const annualQuota = isMonthly && type.monthlyCredit > 0
               ? type.monthlyCredit * 12
@@ -1319,11 +1320,11 @@ const LeavesPage = () => {
                     isLow ? 'text-amber-700' :
                       'text-slate-900'
                     }`}>
-                    {isUnpaid ? '∞' : type.available}
+                    {isUnlimited ? '∞' : type.available}
                   </p>
                   <p className="text-[10px] sm:text-xs text-slate-500">
                     {isCompOff ? 'available' :
-                      isUnpaid ? 'unlimited' :
+                      isUnlimited ? 'unlimited' :
                         isMonthly ? `/${annualQuota}/yr` :
                           `/${type.quota}/yr`}
                   </p>
